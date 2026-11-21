@@ -539,7 +539,7 @@ else:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(arg('--save')), compress=True); print('saved')
     if '--render' in argv:
         out = os.path.abspath(arg('--render')); os.makedirs(out, exist_ok=True)
-        for f in range(s0, s1 + 1):
+        for f in range(s0, s1 + 1, int(arg('--step', 1))):
             scene.frame_set(f); scene.render.filepath = os.path.join(out, f'f{f:05d}.jpg')
             bpy.ops.render.render(write_still=True)
             print('frame', f, flush=True)
