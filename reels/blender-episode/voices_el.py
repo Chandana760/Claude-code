@@ -24,6 +24,9 @@ SCRIPT = [  # [tags] are ElevenLabs v3 delivery cues; captions show the text wit
   ('M', '[hopeful] Happy crying?', 'maya', 'lean', 0.7),
   ('C', '[long pause] Mostly.', 'claude', 'look-away', 1.2),
 ]
+if os.path.exists('script.py'):  # an episode folder can bring its own script (run from that folder)
+    import importlib.util; _sp = importlib.util.spec_from_file_location('ep_script', 'script.py')
+    _m = importlib.util.module_from_spec(_sp); _sp.loader.exec_module(_m); SCRIPT = _m.SCRIPT
 CAPTION = lambda t: re.sub(r'\s+', ' ', re.sub(r'\[[^\]]*\]', '', t)).strip()
 SR = 44100
 os.makedirs('vo3', exist_ok=True)

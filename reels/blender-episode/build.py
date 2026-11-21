@@ -13,7 +13,9 @@ argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 def arg(name, default=None):
     return argv[argv.index(name) + 1] if name in argv else default
 HERE = os.path.dirname(os.path.abspath(__file__))
-EP = json.load(open(os.path.join(HERE, 'lines.json')))
+EPDIR = os.path.abspath(arg('--ep', HERE))          # episode folder with lines.json / dialogue.wav
+EP = json.load(open(os.path.join(EPDIR, 'lines.json')))
+SET = arg('--set', 'sheet')   # 'sheet' = night studio with whiteboard (explainers); 'daily' = sunset desk, no board
 FPS = EP['fps']; LINES = EP['lines']; DUR = EP['duration']
 NFRAMES = int(DUR * FPS)
 
@@ -145,6 +147,14 @@ def blob(name, elems, m, parent=None, loc=(0, 0, 0), res=0.006):
     o.location = loc
     return o
 
+def chunk(name, m, parent, loc, size, rot=(0, 0, 0), seed=1, faces=60, jitter=0.06):
+    """A chunky low-poly lump (hair lock, Claude lobe): jittered icosphere, decimated, flat shaded."""
+    bm = bmesh.new(); bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.0)
+    rnd = random.Random(seed)
+    for v in bm.verts: v.co = Vector((v.co.x * size[0], v.co.y * size[1], v.co.z * size[2])) + Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), rnd.uniform(-1, 1))) * min(size) * jitter
+    o = from_bm(name, bm, m, parent, loc, smooth=False); o.rotation_euler = rot
+    return facet(o, faces)
+
 def facet(o, target_faces):
     """Soft low-poly look: decimate to about target_faces and flat-shade (like the reference renders)."""
     n = len(o.data.polygons)
@@ -205,12 +215,24 @@ def area(name, color, energy, loc, target, size=1.0):
     o = link(bpy.data.objects.new(name, L), None, loc)
     d = Vector(target) - Vector(loc); o.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
     return o
-area('key', '#ffb070', 85, (0.8, -0.3, 1.45), (0.0, 0.72, 1.15), 0.5)          # warm desk-lamp key
-area('claudeKey', '#ffb070', 26, (0.3, -0.5, 1.05), (-0.22, -0.1, 0.84), 0.35)
-area('fill', '#5a6cff', 6, (-1.2, -0.9, 1.4), (0.0, 0.4, 1.0), 1.6)           # cool night fill
-area('rim', '#7b8cff', 70, (-0.7, 1.6, 1.9), (0.0, 0.72, 1.25), 0.8)          # window rim (blue)
-area('rim2', '#b06bff', 70, (0.8, 1.6, 1.8), (0.0, 0.72, 1.2), 0.8)           # purple rim
-area('claudeRim', '#8f9cff', 12, (-0.45, 0.4, 1.05), (-0.22, -0.1, 0.84), 0.3)
+SUN = SET == 'daily'
+if SUN: world.node_tree.nodes['Background'].inputs['Color'].default_value = srgb('#3a2350')
+if SUN:
+    world.node_tree.nodes['Background'].inputs['Strength'].default_value = 0.08
+    area('key', '#ffe6d2', 45, (-0.5, -1.3, 1.6), (0.0, 0.72, 1.15), 1.2)       # soft, near-neutral front key
+    area('claudeKey', '#ffe6d2', 10, (-0.5, -0.8, 1.1), (-0.22, -0.1, 0.84), 0.6)
+    area('fill', '#7f8cff', 4, (1.3, -0.9, 1.3), (0.0, 0.4, 1.0), 1.6)            # cool fill
+    area('rim', '#ff9a6a', 45, (-0.8, 1.6, 1.8), (0.0, 0.72, 1.25), 0.8)          # dusk window rims
+    area('rim2', '#c78bff', 35, (0.8, 1.6, 1.8), (0.0, 0.72, 1.2), 0.8)
+    area('monGlow', '#8fb4ff', 8, (-0.5, 0.2, 1.15), (0.0, 0.72, 1.2), 0.5)       # monitor spill
+    area('lampWarm', '#ffbe78', 40, (-0.5, 0.0, 1.85), (0.0, 0.3, 0.9), 0.4)        # hanging desk lamp
+else:
+    area('key', '#ffb070', 85, (0.8, -0.3, 1.45), (0.0, 0.72, 1.15), 0.5)          # warm desk-lamp key
+    area('claudeKey', '#ffb070', 26, (0.3, -0.5, 1.05), (-0.22, -0.1, 0.84), 0.35)
+    area('fill', '#5a6cff', 6, (-1.2, -0.9, 1.4), (0.0, 0.4, 1.0), 1.6)           # cool night fill
+    area('rim', '#7b8cff', 70, (-0.7, 1.6, 1.9), (0.0, 0.72, 1.25), 0.8)          # window rim (blue)
+    area('rim2', '#b06bff', 70, (0.8, 1.6, 1.8), (0.0, 0.72, 1.2), 0.8)           # purple rim
+    area('claudeRim', '#8f9cff', 12, (-0.45, 0.4, 1.05), (-0.22, -0.1, 0.84), 0.3)
 
 # ------------------------------------------------------------------ room: night tech studio with a city window
 DESK = 0.75
@@ -240,7 +262,27 @@ def city_image(w=1024, h=640, seed=3):
     k = np.exp(-np.linspace(-2, 2, 7) ** 2); k /= k.sum()
     for ax in (0, 1): img = np.apply_along_axis(lambda v: np.convolve(v, k, mode='same'), ax, img)
     return np.dstack([np.clip(img, 0, 4), np.ones((h, w))])
-emit_plane('city', image('city', city_image()), 11, 6.5, 1.4, loc=(0, 6.0, 2.2))
+def sunset_image(w=1024, h=640, seed=8):
+    rnd = np.random.default_rng(seed)
+    y = np.linspace(0, 1, h)[:, None]
+    stops = [(0, (0.10, 0.06, 0.28)), (0.45, (0.55, 0.22, 0.55)), (0.75, (1.0, 0.45, 0.45)), (1, (1.0, 0.62, 0.35))]
+    col = np.zeros((h, 3))
+    for (a, ca), (b, cb) in zip(stops, stops[1:]):
+        m = (y[:, 0] >= a) & (y[:, 0] <= b); u = ((y[:, 0][m] - a) / (b - a))[:, None]
+        col[m] = np.array(ca) * (1 - u) + np.array(cb) * u
+    img = np.repeat(col[:, None, :], w, axis=1)
+    xs = 0
+    while xs < w:
+        bw = rnd.integers(50, 130); bh = rnd.integers(int(h * 0.25), int(h * 0.7))
+        img[h - bh:, xs:xs + bw] = np.array([0.07, 0.04, 0.14])
+        for _ in range(int(bw * bh / 1400)):
+            wx, wy = xs + rnd.integers(4, max(5, bw - 8)), h - bh + rnd.integers(6, bh - 6)
+            img[wy:wy + 7, wx:wx + 8] = [1.0, 0.8, 0.45] if rnd.random() < 0.7 else [0.5, 0.8, 1.0]
+        xs += bw + rnd.integers(0, 14)
+    k = np.exp(-np.linspace(-2, 2, 9) ** 2); k /= k.sum()
+    for ax in (0, 1): img = np.apply_along_axis(lambda v: np.convolve(v, k, mode='same'), ax, img)
+    return np.dstack([np.clip(img, 0, 4), np.ones((h, w))])
+emit_plane('city', image('city', sunset_image() if SUN else city_image()), 11, 6.5, 1.25 if SUN else 1.4, loc=(0, 6.0, 2.2))
 # bookshelf (left) with warm books
 shelf = empty('shelf', loc=(-1.75, 1.75, 0)); shelf.rotation_euler = (0, 0, 0.3)
 cube('shelf_body', (0.9, 0.35, 2.1), mat('#3d2a22', 0.7), shelf, (0, 0, 1.05))
@@ -259,25 +301,26 @@ for k in range(13):
     a = k * 2.4; h = 0.4 + (k % 5) * 0.13
     leaf = uvsphere('leaf', 0.14, mat('#3f8a4f' if k % 2 else '#2f6e40', 0.6), pl, (math.cos(a) * 0.14, math.sin(a) * 0.14, 0.36 + h), scale=(0.6, 0.14, 0.9))
     leaf.rotation_euler = (math.sin(a) * 0.5, -math.cos(a) * 0.5, a)
-# whiteboard on an easel (left back) with "What is an API?"
-wb = empty('whiteboard', loc=(-0.95, 1.35, 0)); wb.rotation_euler = (0, 0, 0.25)
-cube('wb_frame', (0.95, 0.03, 0.65), mat('#c7ccd6', 0.4, metal=0.3), wb, (0, 0, 1.45), bevel=0.01)
-cube('wb_board', (0.9, 0.035, 0.6), mat('#f6f7fa', 0.35), wb, (0, -0.003, 1.45))
-for sx in (-1, 1): cube('wb_leg', (0.03, 0.03, 1.15), mat('#8a919f', 0.5), wb, (sx * 0.4, 0.04, 0.575))
-def board_text(body, loc, size, color):
-    cu = bpy.data.curves.new('txt', 'FONT'); cu.body = body; cu.size = size; cu.align_x = 'CENTER'; cu.extrude = 0.0005
-    o = link(bpy.data.objects.new('txt', cu), wb, loc); o.rotation_euler = (math.pi / 2, 0, 0)
-    o.data.materials.append(mat(color, 0.5)); return o
-board_text('WHAT IS AN API?', (0, -0.025, 1.64), 0.06, '#1d2433')
-board_text('You ask  ->  API  ->  Answer', (0, -0.025, 1.42), 0.045, '#2f6fd6')
+# whiteboard on an easel (left back) with "What is an API?" - explainer episodes only
+if not SUN:
+  wb = empty('whiteboard', loc=(-0.95, 1.35, 0)); wb.rotation_euler = (0, 0, 0.25)
+  cube('wb_frame', (0.95, 0.03, 0.65), mat('#c7ccd6', 0.4, metal=0.3), wb, (0, 0, 1.45), bevel=0.01)
+  cube('wb_board', (0.9, 0.035, 0.6), mat('#f6f7fa', 0.35), wb, (0, -0.003, 1.45))
+  for sx in (-1, 1): cube('wb_leg', (0.03, 0.03, 1.15), mat('#8a919f', 0.5), wb, (sx * 0.4, 0.04, 0.575))
+  def board_text(body, loc, size, color):
+      cu = bpy.data.curves.new('txt', 'FONT'); cu.body = body; cu.size = size; cu.align_x = 'CENTER'; cu.extrude = 0.0005
+      o = link(bpy.data.objects.new('txt', cu), wb, loc); o.rotation_euler = (math.pi / 2, 0, 0)
+      o.data.materials.append(mat(color, 0.5)); return o
+  board_text('WHAT IS AN API?', (0, -0.025, 1.64), 0.06, '#1d2433')
+  board_text('You ask  ->  API  ->  Answer', (0, -0.025, 1.42), 0.045, '#2f6fd6')
 
 # ------------------------------------------------------------------ desk + props (from the prop sheet)
-wood = mat('#8a5a3c', 0.5, name='desk_wood')
+wood = mat('#4a3022' if SUN else '#8a5a3c', 0.55, name='desk_wood')
 cube('desk', (2.0, 0.95, 0.05), wood, loc=(0.1, 0.12, DESK - 0.025), bevel=0.012)
 for x, y in ((-0.85, -0.3), (1.05, -0.3), (-0.85, 0.55), (1.05, 0.55)):
     cube('leg', (0.05, 0.05, DESK - 0.05), mat('#2b2018', 0.6), None, (x, y, (DESK - 0.05) / 2))
 # monitor with code (right back)
-mon = empty('monitor', loc=(0.72, 0.38, DESK)); mon.rotation_euler = (0, 0, 0.4)
+mon = empty('monitor', loc=(-0.5, 0.3, DESK) if SUN else (0.72, 0.38, DESK)); mon.rotation_euler = (0, 0, 0.45 if SUN else 0.4)
 dark = mat('#1b1d26', 0.4)
 cube('mon_base', (0.2, 0.14, 0.015), dark, mon, (0, 0, 0.008), bevel=0.004)
 cube('mon_neck', (0.04, 0.03, 0.22), dark, mon, (0, 0.02, 0.12))
@@ -292,157 +335,170 @@ def code_image(w=512, h=300, seed=42):
             ww = rnd.integers(20, 90); img[12 + i * 17: 20 + i * 17, x:x + ww] = cols[rnd.integers(0, 5)]; x += ww + 8
     return np.dstack([img, np.ones((h, w))])
 emit_plane('mon_screen', image('code', code_image()), 0.56, 0.33, 2.0, mon, (0, -0.018, 0.41))
-# laptop in front of Maya (lid toward camera)
-lap = empty('laptop', loc=(0.22, 0.18, DESK)); lap.rotation_euler = (0, 0, 0.15)
-alu = mat('#aeb4c2', 0.35, metal=0.5, name='alu')
-cube('lap_base', (0.3, 0.21, 0.012), alu, lap, (0, 0, 0.006), bevel=0.004)
-lid = empty('lap_lid_pivot', lap, (0, -0.105, 0.012)); lid.rotation_euler = (-1.9, 0, 0)
-cube('lap_lid', (0.3, 0.01, 0.2), alu, lid, (0, 0, 0.1), bevel=0.004)
-Ls = bpy.data.lights.new('screen_glow', 'AREA'); Ls.color = srgb('#9fbaff')[:3]; Ls.energy = 3; Ls.size = 0.25
-link(bpy.data.objects.new('screen_glow', Ls), lid, (0, 0.03, 0.1)).rotation_euler = (math.pi / 2, 0, 0)
-# desk lamp (right, warm) - the key light's motivation
-dl = empty('desk_lamp', loc=(1.0, 0.0, DESK)); dl.rotation_euler = (0, 0, 0.6)
-lampm = mat('#2a2f45', 0.45, name='lamp_navy')
-cyl('lamp_base', 0.07, 0.02, lampm, dl, (0, 0, 0.01))
-cyl('lamp_arm', 0.009, 0.45, lampm, dl, (0, 0.03, 0.22), rot=(-0.15, 0, 0))
-cyl('lamp_head', 0.08, 0.11, lampm, dl, (0, -0.06, 0.45), r2=0.035, rot=(-1.0, 0, 0))
-bulb = mat('#ffe2a8', 0.4, emit='#ffcf80', strength=25, name='bulb')
-uvsphere('lamp_bulb', 0.028, bulb, dl, (0, -0.09, 0.42))
-Ll = bpy.data.lights.new('desk_lamp_light', 'POINT'); Ll.color = srgb('#ffc98a')[:3]; Ll.energy = 10; Ll.shadow_soft_size = 0.05
-link(bpy.data.objects.new('desk_lamp_light', Ll), dl, (0, -0.1, 0.38))
-# mug, pen cup, books, small plant
-mug = empty('mug', loc=(-0.55, 0.1, DESK))
-cyl('mug_body', 0.045, 0.1, mat('#f4efe6', 0.35), mug, (0, 0, 0.05))
-cyl('coffee', 0.04, 0.005, mat('#4a2a1a', 0.2), mug, (0, 0, 0.095))
-torus('mug_handle', 0.028, 0.008, mat('#f4efe6', 0.35), mug, (0.05, 0, 0.05), rot=(math.pi / 2, 0, 0))
-pc = empty('pencup', loc=(-0.7, 0.3, DESK))
-cyl('cup', 0.04, 0.1, mat('#2f7f7a', 0.5), pc, (0, 0, 0.05))
-for k, c in enumerate(['#e8743b', '#5fd6b8', '#7c3fc4', '#e0b84a']):
-    cyl('pencil', 0.005, 0.15, mat(c, 0.5), pc, ((k - 1.5) * 0.013, 0, 0.12), rot=(0, (k - 1.5) * 0.12, 0))
-for k, (c, hh) in enumerate([('#3f9a5a', 0.035), ('#7c3fc4', 0.03), ('#e5c04a', 0.035)]):
-    cube('deskbook', (0.22, 0.16, hh), mat(c, 0.6), loc=(-0.62, -0.25, DESK + hh / 2 + k * 0.034), rot=(0, 0, 0.1 * (k - 1)), bevel=0.003)
-cyl('desk_pot', 0.045, 0.07, mat('#d9c6aa', 0.6), None, (0.6, -0.25, DESK + 0.035))
-for k in range(6):
-    a = k * 1.05
-    lf = uvsphere('dleaf', 0.05, mat('#3f8a4f', 0.6), None, (0.6 + math.cos(a) * 0.03, -0.25 + math.sin(a) * 0.03, DESK + 0.12), scale=(0.5, 0.15, 1.0))
-    lf.rotation_euler = (math.sin(a) * 0.5, -math.cos(a) * 0.5, a)
+if not SUN:   # sheet set: laptop, desk lamp, books, pen cup, plant
+    # laptop in front of Maya (lid toward camera)
+    lap = empty('laptop', loc=(0.22, 0.18, DESK)); lap.rotation_euler = (0, 0, 0.15)
+    alu = mat('#aeb4c2', 0.35, metal=0.5, name='alu')
+    cube('lap_base', (0.3, 0.21, 0.012), alu, lap, (0, 0, 0.006), bevel=0.004)
+    lid = empty('lap_lid_pivot', lap, (0, -0.105, 0.012)); lid.rotation_euler = (-1.9, 0, 0)
+    cube('lap_lid', (0.3, 0.01, 0.2), alu, lid, (0, 0, 0.1), bevel=0.004)
+    Ls = bpy.data.lights.new('screen_glow', 'AREA'); Ls.color = srgb('#9fbaff')[:3]; Ls.energy = 3; Ls.size = 0.25
+    link(bpy.data.objects.new('screen_glow', Ls), lid, (0, 0.03, 0.1)).rotation_euler = (math.pi / 2, 0, 0)
+    # desk lamp (right, warm) - the key light's motivation
+    dl = empty('desk_lamp', loc=(1.0, 0.0, DESK)); dl.rotation_euler = (0, 0, 0.6)
+    lampm = mat('#2a2f45', 0.45, name='lamp_navy')
+    cyl('lamp_base', 0.07, 0.02, lampm, dl, (0, 0, 0.01))
+    cyl('lamp_arm', 0.009, 0.45, lampm, dl, (0, 0.03, 0.22), rot=(-0.15, 0, 0))
+    cyl('lamp_head', 0.08, 0.11, lampm, dl, (0, -0.06, 0.45), r2=0.035, rot=(-1.0, 0, 0))
+    bulb = mat('#ffe2a8', 0.4, emit='#ffcf80', strength=25, name='bulb')
+    uvsphere('lamp_bulb', 0.028, bulb, dl, (0, -0.09, 0.42))
+    Ll = bpy.data.lights.new('desk_lamp_light', 'POINT'); Ll.color = srgb('#ffc98a')[:3]; Ll.energy = 10; Ll.shadow_soft_size = 0.05
+    link(bpy.data.objects.new('desk_lamp_light', Ll), dl, (0, -0.1, 0.38))
+    # mug, pen cup, books, small plant
+    mug = empty('mug', loc=(-0.55, 0.1, DESK))
+    cyl('mug_body', 0.045, 0.1, mat('#f4efe6', 0.35), mug, (0, 0, 0.05))
+    cyl('coffee', 0.04, 0.005, mat('#4a2a1a', 0.2), mug, (0, 0, 0.095))
+    torus('mug_handle', 0.028, 0.008, mat('#f4efe6', 0.35), mug, (0.05, 0, 0.05), rot=(math.pi / 2, 0, 0))
+    pc = empty('pencup', loc=(-0.7, 0.3, DESK))
+    cyl('cup', 0.04, 0.1, mat('#2f7f7a', 0.5), pc, (0, 0, 0.05))
+    for k, c in enumerate(['#e8743b', '#5fd6b8', '#7c3fc4', '#e0b84a']):
+        cyl('pencil', 0.005, 0.15, mat(c, 0.5), pc, ((k - 1.5) * 0.013, 0, 0.12), rot=(0, (k - 1.5) * 0.12, 0))
+    for k, (c, hh) in enumerate([('#3f9a5a', 0.035), ('#7c3fc4', 0.03), ('#e5c04a', 0.035)]):
+        cube('deskbook', (0.22, 0.16, hh), mat(c, 0.6), loc=(-0.62, -0.25, DESK + hh / 2 + k * 0.034), rot=(0, 0, 0.1 * (k - 1)), bevel=0.003)
+    cyl('desk_pot', 0.045, 0.07, mat('#d9c6aa', 0.6), None, (0.6, -0.25, DESK + 0.035))
+    for k in range(6):
+        a = k * 1.05
+        lf = uvsphere('dleaf', 0.05, mat('#3f8a4f', 0.6), None, (0.6 + math.cos(a) * 0.03, -0.25 + math.sin(a) * 0.03, DESK + 0.12), scale=(0.5, 0.15, 1.0))
+        lf.rotation_euler = (math.sin(a) * 0.5, -math.cos(a) * 0.5, a)
+
+else:         # daily set: keyboard, white mug, notepad + pen, sticky notes (like the reference desk)
+    kb = empty('keyboard', loc=(0.02, 0.05, DESK)); kb.rotation_euler = (0, 0, 0.0)
+    cube('kb_body', (0.42, 0.14, 0.018), mat('#22242c', 0.5), kb, (0, 0, 0.009), bevel=0.004)
+    keym = mat('#363944', 0.55)
+    for r_ in range(4):
+        for c_ in range(14):
+            cube('key', (0.024, 0.024, 0.008), keym, kb, (-0.19 + c_ * 0.029, -0.045 + r_ * 0.03, 0.021), bevel=0.002)
+    cube('coaster', (0.11, 0.11, 0.006), mat('#f2c230', 0.6), None, (-0.34, -0.12, DESK + 0.003), bevel=0.002)
+    mug = empty('mug', loc=(-0.34, -0.12, DESK + 0.006))
+    cyl('mug_body', 0.045, 0.1, mat('#f4f1ec', 0.35), mug, (0, 0, 0.05))
+    cyl('coffee', 0.04, 0.005, mat('#4a2a1a', 0.2), mug, (0, 0, 0.095))
+    torus('mug_handle', 0.028, 0.008, mat('#f4f1ec', 0.35), mug, (0.05, 0, 0.05), rot=(math.pi / 2, 0, 0))
+    cube('notepad', (0.17, 0.22, 0.01), mat('#f3d27a', 0.6), None, (0.12, -0.24, DESK + 0.005), rot=(0, 0, 0.12))
+    cyl('pen', 0.005, 0.15, mat('#222222', 0.5), None, (0.15, -0.23, DESK + 0.015), rot=(0, math.pi / 2, 0.9))
+    pp = empty('plant_pot', loc=(-0.8, 0.35, DESK))
+    cyl('pot', 0.06, 0.1, mat('#efe9df', 0.6), pp, (0, 0, 0.05), r2=0.05)
+    for k in range(9):
+        a = k * 2.4
+        lf = uvsphere('leaf', 0.06, mat('#4f9a3a' if k % 2 else '#3c7d2e', 0.6), pp, (math.cos(a) * 0.04, math.sin(a) * 0.04, 0.16 + (k % 3) * 0.03), scale=(0.45, 0.14, 1.0))
+        lf.rotation_euler = (math.sin(a) * 0.6, -math.cos(a) * 0.6, a)
 
 # ------------------------------------------------------------------ CLAUDE (orange faceted cloud: no arms, no mouth)
-CL = Vector((-0.22, -0.1, DESK))
-orange = mat('#ff6a0a', 0.5, name='claude_orange')
+CL = Vector((0.32, -0.08, DESK)) if SUN else Vector((-0.22, -0.1, DESK))
+CS = -1 if CL.x > 0 else 1     # which side Claude sits on (flips turn directions)
+orange = mat('#ea6a24', 0.8, name='claude_orange')
 claude = empty('claude', loc=CL)
 cbody = empty('claude_body', claude, (0, 0, 0.0))
-def faceted_cloud(name, parts, m, parent, seed=21):
-    bm = bmesh.new(); rnd = random.Random(seed)
-    for (c, r, sc) in parts:
-        mtx = Matrix.Translation(Vector(c)) @ Matrix.Diagonal(Vector((sc[0], sc[1], sc[2], 1)))
-        res = bmesh.ops.create_icosphere(bm, subdivisions=3, radius=r, matrix=mtx)
-        for v in res['verts']: v.co += Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), rnd.uniform(-1, 1))) * r * 0.03
-    return from_bm(name, bm, m, parent, smooth=False)
-parts = [((0, 0, 0.07), 0.075, (1.35, 0.8, 0.85)), ((0, 0, 0.035), 0.07, (1.45, 0.82, 0.5))]
-for k in range(5):   # bumps only along the top, like the sheet
-    a = 0.35 + k / 4 * (math.pi - 0.7)
-    parts.append(((math.cos(a) * 0.075, 0.0, 0.095 + math.sin(a) * 0.04), 0.042, (1, 0.82, 0.95)))
-body = facet(faceted_cloud('claude_shape', parts, orange, cbody), 650)
+CZ = 0.1
+body = chunk('claude_core', orange, cbody, (0, 0, CZ), (0.07, 0.056, 0.068), seed=3, faces=120, jitter=0.04)
+for k, ang in enumerate((90, 38, 142, -12, 192, -62, -118)):
+    a_ = math.radians(ang)
+    chunk(f'claude_lobe{k}', orange, cbody, (math.cos(a_) * 0.068, 0.002, CZ + math.sin(a_) * 0.064), (0.044, 0.05, 0.043), seed=10 + k, faces=70, jitter=0.05)
 eyem = mat('#111111', 0.4, name='eye_black')
 c_eyes = []
 for s in (-1, 1):
-    c_eyes.append(cube(f'claude_eye{s}', (0.013, 0.01, 0.034), eyem, cbody, (s * 0.026, -0.058, 0.075), bevel=0.0015))
+    c_eyes.append(cube(f'claude_eye{s}', (0.012, 0.01, 0.038), eyem, cbody, (s * 0.026, -0.062, CZ + 0.008), bevel=0.0015))
 c_feet = []
-for i, (x, y) in enumerate(((-0.07, -0.02), (-0.024, -0.03), (0.024, -0.03), (0.07, -0.02))):
-    c_feet.append(facet(ico(f'claude_foot{i}', 0.02, mat('#f2600a', 0.55), claude, (x, y, 0.012), sub=2, jitter=0.03, seed=10 + i), 60))
+for i, x in enumerate((-0.045, 0.045)):
+    c_feet.append(facet(uvsphere(f'claude_foot{i}', 0.026, mat('#dc5c1c', 0.8), claude, (x, -0.01, 0.02), scale=(1.1, 1.05, 0.8)), 50))
 ticks = empty('claude_ticks', cbody, (0, 0, 0.19))
 for i, a in enumerate((-0.45, 0, 0.45)):
     t = cube('tick', (0.006, 0.006, 0.028), mat('#ffd23f', 0.5, emit='#ffd23f', strength=2), ticks, (math.sin(a) * 0.06, 0, math.cos(a) * 0.02))
     t.rotation_euler = (0, a, 0)
 
 # ------------------------------------------------------------------ MAYA (per the character sheet: soft low-poly facets)
-skin = mat('#f7c09a', 0.45, sss=0.2, name='skin')
-jacket = add_bump(mat('#0c5a63', 0.7, sheen=0.2, name='jacket_teal'), 'noise', 300, 0.03)
-creamtop = mat('#d8c8ae', 0.85, name='top_cream')
-hairm = mat('#3a1a4a', 0.42, sheen=0.3, name='hair_plum')
+skin = mat('#e8a37a', 0.65, sss=0.1, name='skin')
+jacket = add_bump(mat('#2e5b54', 0.85, sheen=0.3, name='sweater_green'), 'noise', 140, 0.08)   # chunky knit
+cuffm = mat('#284f49', 0.85, name='sweater_rib')
+collar_or = mat('#e2622a', 0.75, name='inner_collar_orange')
+hairm = mat('#4a2219', 0.6, sheen=0.15, name='hair_brown')
 glassm = mat('#111111', 0.3, name='glasses_black')
-pantsm = mat('#d9c3a0', 0.8, name='pants_beige')
+pantsm = mat('#3a3438', 0.85, name='pants_charcoal')
 yellow = jacket
 MY = 0.74
 maya = empty('maya', loc=(0.0, MY, 0))
-chair = mat('#1f6a6e', 0.6, name='chair_teal')
+chair = mat('#5a2a24', 0.6, name='chair_maroon')
 cube('seat', (0.46, 0.44, 0.06), chair, maya, (0, 0.05, 0.47), bevel=0.02)
 cube('back', (0.46, 0.06, 0.6), chair, maya, (0, 0.3, 0.82), bevel=0.02)
-cyl('post', 0.025, 0.42, mat('#2a2f45', 0.5), maya, (0, 0.05, 0.24))
-for s in (-1, 1):   # beige cargo pants + white sneakers
+cyl('post', 0.025, 0.42, mat('#2a2a2e', 0.5), maya, (0, 0.05, 0.24))
+for s in (-1, 1):   # charcoal cuffed trousers + cream chunky sneakers
     facet(cyl('thigh', 0.075, 0.4, pantsm, maya, (s * 0.09, -0.12, 0.53), rot=(math.pi / 2, 0, 0)), 120)
     facet(cyl('shin', 0.07, 0.45, pantsm, maya, (s * 0.09, -0.3, 0.27)), 120)
-    facet(uvsphere('shoe', 0.07, mat('#f4f1ea', 0.6), maya, (s * 0.09, -0.36, 0.04), scale=(0.9, 1.4, 0.55)), 100)
+    facet(cyl('turnup', 0.078, 0.05, mat('#4a4448', 0.85), maya, (s * 0.09, -0.3, 0.09)), 60)
+    facet(uvsphere('shoe', 0.072, mat('#e9dfcb', 0.6), maya, (s * 0.09, -0.36, 0.04), scale=(0.9, 1.45, 0.6)), 100)
 
 torso = empty('torso', maya, (0, 0, 0.52))
-facet(blob('jacket', [
-    ((0, 0, 0.2), (0.165, 0.125, 0.22)),
-    ((-0.13, 0, 0.33), (0.095, 0.095, 0.085)), ((0.13, 0, 0.33), (0.095, 0.095, 0.085)),
-    ((0, 0.01, 0.06), (0.17, 0.13, 0.08)),
-    ((-0.075, -0.06, 0.37), (0.06, 0.05, 0.05)), ((0.075, -0.06, 0.37), (0.06, 0.05, 0.05)),   # collar
-    ((0, -0.15, 0.27), (0.045, 0.05, 0.2), 'neg'),                                               # open front
-], jacket, torso), 1400)
-facet(uvsphere('top', 0.05, creamtop, torso, (0, -0.075, 0.25), scale=(1.15, 0.9, 2.6)), 200)        # cream top inside the open jacket
-cyl('neck', 0.04, 0.09, skin, torso, (0, 0, 0.43))
+facet(blob('sweater', [   # roomy knit sweater, dropped shoulders
+    ((0, 0, 0.2), (0.175, 0.13, 0.22)),
+    ((-0.14, 0, 0.31), (0.1, 0.105, 0.095)), ((0.14, 0, 0.31), (0.1, 0.105, 0.095)),
+    ((0, 0.01, 0.07), (0.18, 0.135, 0.08)),
+], jacket, torso), 700)
+facet(cyl('hem', 0.172, 0.05, cuffm, torso, (0, 0, 0.02), seg=20), 80)
+facet(cyl('turtleneck', 0.066, 0.075, jacket, torso, (0, 0, 0.41), seg=14), 60)
+cyl('inner_collar', 0.055, 0.085, collar_or, torso, (0, -0.004, 0.418), seg=14)
+cyl('neck', 0.04, 0.1, skin, torso, (0, 0, 0.44))
 
-head = empty('head', torso, (0, 0, 0.385))
+head = empty('head', torso, (0, 0, 0.385)); head.scale = (1.12, 1.12, 1.12)   # big head, chibi-ish proportions
 HC = Vector((0, 0, 0.15)); R = 0.15
-facet(uvsphere('head_skin', R, skin, head, HC, scale=(1.0, 0.95, 0.98), seg=48, ring=24), 1100)
-facet(uvsphere('nose', 0.012, skin, head, HC + Vector((0, -0.142, -0.022)), scale=(1, 0.8, 0.8)), 40)
-# long, voluminous, wavy hair with a swept fringe
-hair = [
-    (HC + Vector((0, 0.03, 0.04)), (0.158, 0.152, 0.15)),              # crown
-    (HC + Vector((-0.04, -0.095, 0.118)), (0.11, 0.05, 0.05)),         # fringe swept to one side
-    (HC + Vector((0.065, -0.095, 0.105)), (0.085, 0.045, 0.047)),
-    (HC + Vector((0.125, -0.07, 0.04)), (0.05, 0.06, 0.07)),
-    (HC + Vector((-0.13, -0.06, 0.05)), (0.05, 0.06, 0.07)),
-]
-for s in (-1, 1):          # wavy side curtains down past the shoulders
-    for k in range(7):
-        wave = math.sin(k * 1.3) * 0.022
-        hair.append((HC + Vector((s * (0.165 + k * 0.014 + wave), 0.0 + k * 0.01, -0.03 - k * 0.062)), (0.065, 0.075, 0.068)))
-for k in range(6):         # full back
-    for s in (-1, 0, 1):
-        hair.append((HC + Vector((s * 0.1 + math.sin(k * 1.1 + s) * 0.02, 0.1, -0.02 - k * 0.06)), (0.1, 0.08, 0.08)))
-facet(blob('hair', hair, hairm, head, res=0.007), 900)
-def clump(pts, r0, r1):
-    o = strand('clump', pts, r0, r1, hairm, head, bulge=True)
-    o.data.bevel_resolution = 0; o.data.resolution_u = 4   # chunky facets, like the sheet
-    return o
-for s in (-1, 1):
-    for j in range(6):   # wavy locks from the crown down past the shoulders
-        y0 = -0.07 + j * 0.04
-        pts = [HC + Vector((s * 0.03, y0, 0.17))]
-        for k in range(1, 6):
-            pts.append(HC + Vector((s * (0.165 + k * 0.014 + math.sin(k * 1.4 + j) * 0.02), y0 + k * 0.012, 0.13 - k * 0.085)))
-        clump(pts, 0.034, 0.014)
-for j in range(4):       # fringe swept across the forehead
-    clump([HC + Vector((-0.02 + j * 0.01, -0.05, 0.175)), HC + Vector((0.03 + j * 0.025, -0.13, 0.135 - j * 0.008)),
-           HC + Vector((0.12 + j * 0.012, -0.1, 0.075 - j * 0.012))], 0.022, 0.008)
-# face: dot eyes with a highlight, big round black glasses, small mouth
+facet(uvsphere('head_skin', R, skin, head, HC, scale=(1.0, 0.96, 1.02), seg=48, ring=24), 1000)
+facet(uvsphere('nose', 0.011, skin, head, HC + Vector((0, -0.146, -0.028)), scale=(1, 0.8, 0.8)), 40)
+# shoulder-length, voluminous, wavy brown hair; side part on her right with a fringe swept across
+facet(blob('hair_cap', [
+    (HC + Vector((0, 0.02, 0.03)), (0.156, 0.152, 0.152)),
+    (HC + Vector((0, -0.15, -0.075)), (0.11, 0.09, 0.12), 'neg'),
+], hairm, head, res=0.006), 300)
+_sd = [100]
+def lock(loc, size, rot=(0, 0, 0)):
+    _sd[0] += 1; return chunk('lock', hairm, head, HC + Vector(loc), size, rot, seed=_sd[0], faces=56, jitter=0.08)
+# fringe: from the side part (her right = screen left) swept across the forehead
+lock((-0.045, -0.118, 0.108), (0.075, 0.035, 0.042), (0, -0.25, 0.05))
+lock((0.045, -0.124, 0.088), (0.078, 0.036, 0.048), (0, -0.4, -0.05))
+lock((0.118, -0.098, 0.04), (0.048, 0.042, 0.072), (0, -0.5, -0.2))
+lock((-0.115, -0.095, 0.075), (0.05, 0.04, 0.06), (0, 0.4, 0.2))
+for s_ in (-1, 1):   # wavy chunky sides down to the shoulders, two layers
+    for k in range(4):
+        wv = 0.016 if k % 2 else -0.008
+        lock((s_ * (0.15 + 0.022 * k + wv), -0.045 + k * 0.014, 0.03 - k * 0.07), (0.052, 0.058, 0.062), (0, s_ * (0.3 if k % 2 else -0.2), 0))
+        lock((s_ * (0.135 + 0.02 * k - wv * 0.5), 0.04 + k * 0.01, 0.0 - k * 0.07), (0.058, 0.06, 0.066), (0, s_ * (-0.25 if k % 2 else 0.25), 0))
+for k in range(4):   # back
+    for s_ in (-1, 0, 1):
+        lock((s_ * 0.095 + (0.012 if k % 2 else -0.01), 0.1, 0.02 - k * 0.065), (0.07, 0.06, 0.065), (0, 0.2 * s_, 0))
+clip = cube('hair_clip', (0.05, 0.014, 0.016), mat('#f6a823', 0.4, emit='#f6a823', strength=0.15), head, HC + Vector((-0.1, -0.135, 0.1)), bevel=0.003)
+clip.rotation_euler = (0.2, 0.3, 0.25)
+# face: dot eyes with a catchlight, brows, thin round glasses, small smile
 m_eyes, brows = [], []
 for s in (-1, 1):
-    eg = empty(f'eyeball{s}', head, HC + Vector((s * 0.056, -0.14, -0.004)))
-    uvsphere('eye', 0.011, eyem, eg, (0, 0, 0), scale=(0.85, 0.5, 1.2))
-    uvsphere('catchlight', 0.0032, mat('#ffffff', 0.2, emit='#ffffff', strength=3), eg, (0.004, -0.006, 0.005), scale=(1, 0.4, 1))
+    eg = empty(f'eyeball{s}', head, HC + Vector((s * 0.058, -0.143, -0.004)))
+    uvsphere('eye', 0.0105, eyem, eg, (0, 0, 0), scale=(0.85, 0.5, 1.15))
+    uvsphere('catchlight', 0.0028, mat('#ffffff', 0.2, emit='#ffffff', strength=3), eg, (0.003, -0.005, 0.004), scale=(1, 0.4, 1))
     m_eyes.append(eg)
-    torus(f'glasses{s}', 0.052, 0.0048, glassm, head, HC + Vector((s * 0.06, -0.152, 0.0)), rot=(math.pi / 2, 0, -s * 0.12))
-    b = uvsphere(f'brow{s}', 0.016, mat('#2a1a18', 0.6), head, HC + Vector((s * 0.058, -0.138, 0.072)), scale=(1.5, 0.3, 0.18))
-    b.rotation_euler = (0, s * 0.1, 0); brows.append(b)
-cube('bridge', (0.02, 0.004, 0.004), glassm, head, HC + Vector((0, -0.157, 0.005)))
-mouth = uvsphere('mouth', 0.011, mat('#5a2420', 0.5), head, HC + Vector((0, -0.141, -0.07)), scale=(1.3, 0.3, 0.25))
+    torus(f'glasses{s}', 0.052, 0.0034, glassm, head, HC + Vector((s * 0.06, -0.156, -0.002)), rot=(math.pi / 2, 0, -s * 0.12))
+    cyl(f'temple{s}', 0.0025, 0.13, glassm, head, HC + Vector((s * 0.12, -0.09, 0.003)), seg=8, rot=(math.pi / 2, 0, s * 0.1))
+    b = uvsphere(f'brow{s}', 0.016, mat('#3a1c14', 0.6), head, HC + Vector((s * 0.058, -0.14, 0.066)), scale=(1.35, 0.3, 0.2))
+    b.rotation_euler = (0, s * 0.12, 0); brows.append(b)
+cube('bridge', (0.018, 0.003, 0.003), glassm, head, HC + Vector((0, -0.16, 0.004)))
+mouth = uvsphere('mouth', 0.011, mat('#6a2620', 0.5), head, HC + Vector((0, -0.144, -0.068)), scale=(1.3, 0.3, 0.25))
 
 # arms: shoulder pivot -> upper arm, elbow pivot -> forearm + mitten (no fingers)
 def capsule(name, r, length, m, parent):
     return blob(name, [((0, 0, -length * 0.15), (r, r, r)), ((0, 0, -length * 0.5), (r, r, r)), ((0, 0, -length * 0.85), (r * 0.95, r * 0.95, r * 0.95))], m, parent, res=0.006)
 arms = {}
 for s in (-1, 1):
-    sh = empty(f'shoulder{s}', torso, (s * 0.165, 0, 0.34)); sh.rotation_mode = 'QUATERNION'
-    facet(capsule(f'upper{s}', 0.056, 0.2, jacket, sh), 260)
+    sh = empty(f'shoulder{s}', torso, (s * 0.18, 0, 0.33)); sh.rotation_mode = 'QUATERNION'
+    facet(capsule(f'upper{s}', 0.066, 0.2, jacket, sh), 140)
     el = empty(f'elbow{s}', sh, (0, 0, -0.19)); el.rotation_mode = 'QUATERNION'
-    facet(capsule(f'fore{s}', 0.051, 0.19, jacket, el), 260)
-    facet(uvsphere(f'hand{s}', 0.042, skin, el, (0, 0, -0.205), scale=(0.95, 0.8, 1.1)), 140)
+    facet(capsule(f'fore{s}', 0.06, 0.19, jacket, el), 140)
+    facet(cyl(f'cuff{s}', 0.058, 0.045, cuffm, el, (0, 0, -0.175), seg=12), 40)
+    facet(uvsphere(f'hand{s}', 0.042, skin, el, (0, 0, -0.215), scale=(0.95, 0.8, 1.1)), 140)
     arms[s] = (sh, el)
 
 # ------------------------------------------------------------------ animation
@@ -484,14 +540,14 @@ def head_world():
 def shot(name, u):
     p = ease(u)
     if name == 'maya':
-        h = head_world(); pos = h + Vector((-0.2, -1.2 + p * 0.08, -0.05))
-        return pos, h + Vector((0, 0, -0.11)), 40, (pos - h).length, 1.2
+        h = head_world(); pos = h + Vector((0.06, -1.6 + p * 0.08, 0.0))
+        return pos, h + Vector((0, 0, -0.16)), 40, (pos - h).length, 1.4
     if name == 'claude':
-        c = CL + Vector((0, 0, 0.1)); pos = c + Vector((-0.26, -0.72 + p * 0.05, 0.08))
+        c = CL + Vector((0, 0, 0.1)); pos = c + Vector((CS * 0.2, -0.72 + p * 0.05, 0.08))
         return pos, c + Vector((0.04, 0, 0.03)), 35, (pos - c).length, 1.1
     if name == 'wide':
         h = head_world(); pos = Vector((0.4 - p * 0.05, -1.65 + p * 0.1, 1.18))
-        return pos, Vector((-0.08, 0.35, 0.98)), 30, (pos - h).length, 4.0
+        return pos, Vector((0.0 if SUN else -0.08, 0.35, 0.98)), 30, (pos - h).length, 4.0
 
 def animate(t):
     L = line_at(t); i = LINES.index(L); since = t - L['t']
@@ -503,12 +559,12 @@ def animate(t):
     cbody.location.z = bounce
     sq = 1 + ce * 0.07 + math.sin(t * 2.2) * 0.008
     cbody.scale = (1 / math.sqrt(sq), 1 / math.sqrt(sq), sq)
-    yaw = -0.15 if L['who'] == 'C' else 0.75; roll = 0; eye_x = 0; eye_h = 1
+    yaw = CS * (-0.15 if L['who'] == 'C' else 0.75); roll = 0; eye_x = 0; eye_h = 1
     if L['who'] == 'C' and L['act'] == 'look-away':
-        k = ease(prog(since, 0, 0.35)) * (1 - ease(prog(since, L['d'] + 0.1, 0.4))); yaw = -0.15 - 0.75 * k; eye_x = -0.006 * k
+        k = ease(prog(since, 0, 0.35)) * (1 - ease(prog(since, L['d'] + 0.1, 0.4))); yaw = CS * (-0.15 - 0.75 * k); eye_x = -0.006 * k
     if L['who'] == 'C' and L['act'] == 'tilt': roll = 0.22 * ease(prog(since, 0, 0.4))
     if L['who'] == 'C' and L['act'] == 'squint': eye_h = 1 - 0.68 * ease(prog(since, 0.1, 0.3))
-    if L['who'] == 'M' and L['act'] == 'lean': yaw = 0.95
+    if L['who'] == 'M' and L['act'] == 'lean': yaw = CS * 0.95
     claude.rotation_euler = (0, 0, yaw)
     cbody.rotation_euler = (0, roll + wob(t, 1.3) * 0.02, 0)
     blink = 0.12 if ((t + 0.4) % 3.3) < 0.11 else 1
@@ -520,11 +576,11 @@ def animate(t):
     lean = ease(prog(since, -0.2, 0.35)) * (1 - ease(prog(since, L['d'] + 0.2, 0.5))) if (L['who'] == 'M' and L['act'] == 'lean') else 0
     torso.rotation_euler = (0.13 + lean * 0.15 + wob(t, 1.1) * 0.01, 0, 0)
     torso.location.z = 0.52 + wob(t, 1.6) * 0.002
-    hx = 0.12 - lean * 0.08 + me * 0.05 * math.sin(t * 9)
-    hz = -0.3 + wob(t, 0.6) * 0.04 + (-0.05 if L['who'] == 'C' else 0)
+    hx = 0.03 - lean * 0.08 + me * 0.05 * math.sin(t * 9)
+    hz = CS * (-0.14 - (0.05 if L['who'] == 'C' else 0)) + wob(t, 0.6) * 0.04
     hy = (0.07 if (L['who'] == 'M' and L['act'] == 'gesture') else 0) + wob(t, 0.8) * 0.02
     head.rotation_euler = (hx, hy, hz)
-    mouth.scale = (1.3 - me * 0.25, 0.35, 0.22 + me * 1.3)
+    mouth.scale = (1.5 - me * 0.4, 0.35, 0.1 + me * 0.55)   # a thin line at rest
     by = 0.065 + me * 0.008 - (0.006 if (L['who'] == 'C' and L['act'] in ('look-away', 'squint')) else 0)
     for b in brows: b.location.z = HC.z + by + 0.007
     mb = 0.1 if ((t + 1.3) % 4.1) < 0.13 else 1
@@ -573,10 +629,10 @@ scene.view_settings.view_transform = 'Standard'; scene.view_settings.look = 'Med
 scene.view_settings.exposure = -0.35
 scene.render.image_settings.file_format = 'JPEG'; scene.render.image_settings.quality = 92
 # audio in the .blend so it plays in sync when opened
-if os.path.exists(os.path.join(HERE, 'dialogue.wav')):
+if os.path.exists(os.path.join(EPDIR, 'dialogue.wav')):
     try:
         scene.sequence_editor_create()
-        scene.sequence_editor.sequences.new_sound('dialogue', os.path.join(HERE, 'dialogue.wav'), 1, 1)
+        scene.sequence_editor.sequences.new_sound('dialogue', os.path.join(EPDIR, 'dialogue.wav'), 1, 1)
     except RuntimeError as e:
         print('audio strip skipped:', e)
 
