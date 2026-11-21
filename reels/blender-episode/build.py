@@ -145,6 +145,14 @@ def blob(name, elems, m, parent=None, loc=(0, 0, 0), res=0.006):
     o.location = loc
     return o
 
+def facet(o, target_faces):
+    """Soft low-poly look: decimate to about target_faces and flat-shade (like the reference renders)."""
+    n = len(o.data.polygons)
+    if n > target_faces:
+        d = o.modifiers.new('facet', 'DECIMATE'); d.ratio = target_faces / n
+    for p in o.data.polygons: p.use_smooth = False
+    return o
+
 def image(name, arr):
     h, w, _ = arr.shape
     img = bpy.data.images.new(name, w, h, alpha=False)
@@ -171,24 +179,25 @@ def emit_plane(name, img, w, h, strength, parent=None, loc=(0, 0, 0), rot=(math.
 # ------------------------------------------------------------------ world + lights
 world = bpy.data.worlds.new('w'); scene.world = world; world.use_nodes = True
 world.node_tree.nodes['Background'].inputs['Color'].default_value = srgb('#1e2a33')
-world.node_tree.nodes['Background'].inputs['Strength'].default_value = 0.35
+world.node_tree.nodes['Background'].inputs['Strength'].default_value = 0.12
 
 def area(name, color, energy, loc, target, size=1.0):
     L = bpy.data.lights.new(name, 'AREA'); L.color = srgb(color)[:3]; L.energy = energy; L.size = size
     o = link(bpy.data.objects.new(name, L), None, loc)
     d = Vector(target) - Vector(loc); o.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
     return o
-area('key', '#ffcfa3', 40, (0.9, -0.6, 1.75), (0.0, 0.6, 1.1), 1.6)
-area('fill', '#b9c4ff', 14, (-1.2, -0.8, 1.3), (0.0, 0.4, 1.0), 1.5)
-area('rim', '#ffb08a', 55, (-0.7, 1.5, 1.6), (0.0, 0.7, 1.1), 1.2)
-area('rim2', '#8fd3c8', 30, (0.9, 1.5, 1.4), (0.0, 0.7, 1.0), 1.0)
-area('claudeKey', '#ffe2c8', 10, (-0.55, -0.6, 1.15), (-0.22, -0.1, 0.83), 0.5)
+area('key', '#ffb877', 55, (0.75, -0.35, 1.3), (0.0, 0.72, 1.12), 0.45)        # warm lamp-side key on Maya
+area('claudeKey', '#ffbf86', 16, (0.25, -0.45, 1.0), (-0.22, -0.1, 0.84), 0.3)
+area('fill', '#7f8cff', 3, (-1.2, -0.8, 1.3), (0.0, 0.4, 1.0), 1.5)
+area('rim', '#ff4fa3', 75, (-0.8, 1.45, 2.0), (0.0, 0.72, 1.3), 0.6)       # magenta rim
+area('rim2', '#6a5cff', 55, (0.8, 1.45, 1.9), (0.0, 0.72, 1.25), 0.6)        # violet rim
+area('claudeRim', '#ff6aa8', 14, (-0.45, 0.35, 1.05), (-0.22, -0.1, 0.84), 0.3)
 
 # ------------------------------------------------------------------ room: cosy home studio
 DESK = 0.75
 cube('floor', (8, 8, 0.02), mat('#6b4a36', 0.6), loc=(0, 1.0, -0.01))
 WALL_Y = 1.75
-cube('wall', (8, 0.1, 3.5), mat('#2f4a5a', 0.92, name='wall_paint'), loc=(0, WALL_Y, 1.75))
+cube('wall', (8, 0.1, 3.5), mat('#1f2c3a', 0.92, name='wall_paint'), loc=(0, WALL_Y, 1.75))
 cube('skirting', (8, 0.04, 0.12), mat('#e9dfcf', 0.6), loc=(0, WALL_Y - 0.06, 0.06))
 oak = mat('#c89a6a', 0.55, name='oak')
 rnd = random.Random(5)
@@ -215,11 +224,11 @@ def neon_text(body, loc, size, color, strength):
     o = link(bpy.data.objects.new('neon', cu), None, loc); o.rotation_euler = (math.pi / 2, 0, 0)
     o.data.materials.append(mat(color, 0.3, emit=color, strength=strength, name='neon_' + color))
     return o
-neon_text('hello, world', (0.55, WALL_Y - 0.07, 1.5), 0.13, '#ff7a59', 9)
+neon_text('hello, world', (0.55, WALL_Y - 0.07, 1.5), 0.13, '#ff5a8a', 22)
 L = bpy.data.lights.new('neon_glow', 'AREA'); L.color = srgb('#ff8a6a')[:3]; L.energy = 6; L.size = 0.8
 g = link(bpy.data.objects.new('neon_glow', L), None, (0.55, WALL_Y - 0.3, 1.55)); g.rotation_euler = (math.pi / 2, 0, 0)
 # string lights draped across the wall
-bulb = mat('#ffe2a8', 0.4, emit='#ffcf80', strength=14, name='bulb')
+bulb = mat('#ffe2a8', 0.4, emit='#ffcf80', strength=30, name='bulb')
 for k in range(34):
     u = k / 33; x = -2.2 + u * 4.4
     z = 1.82 - 0.22 * math.sin(math.pi * ((u * 2) % 1.0))
@@ -228,7 +237,7 @@ for k in range(34):
 cyl('cord', 0.004, 1.2, mat('#222222', 0.5), None, (-0.75, 0.9, 2.9))
 cyl('shade', 0.16, 0.18, mat('#e9dfcf', 0.6), None, (-0.75, 0.9, 2.22), r2=0.05)
 uvsphere('pend_bulb', 0.04, bulb, None, (-0.75, 0.9, 2.15))
-Lp = bpy.data.lights.new('pendant', 'POINT'); Lp.color = srgb('#ffc98a')[:3]; Lp.energy = 40; Lp.shadow_soft_size = 0.1
+Lp = bpy.data.lights.new('pendant', 'POINT'); Lp.color = srgb('#ffc98a')[:3]; Lp.energy = 25; Lp.shadow_soft_size = 0.1
 link(bpy.data.objects.new('pendant', Lp), None, (-0.75, 0.9, 2.1))
 pl = empty('plant', loc=(1.5, 1.35, 0))
 cyl('pot', 0.2, 0.42, mat('#e07a5f', 0.6), pl, (0, 0, 0.21), r2=0.16)
@@ -274,7 +283,7 @@ uvsphere('cactus', 0.03, mat('#5a9b6a', 0.6), None, (-0.7, -0.15, DESK + 0.075),
 
 # ------------------------------------------------------------------ CLAUDE (faceted orange cloud with feet)
 CL = Vector((-0.22, -0.1, DESK))
-orange = mat('#e8743b', 0.55, sss=0.0, name='claude_orange')
+orange = mat('#ea6a34', 0.6, name='claude_orange')
 claude = empty('claude', loc=CL)
 cbody = empty('claude_body', claude, (0, 0, 0.0))
 def faceted_cloud(name, parts, m, parent, seed=21):
@@ -282,22 +291,18 @@ def faceted_cloud(name, parts, m, parent, seed=21):
     bm = bmesh.new(); rnd = random.Random(seed)
     for (c, r, sc) in parts:
         mtx = Matrix.Translation(Vector(c)) @ Matrix.Diagonal(Vector((sc[0], sc[1], sc[2], 1)))
-        res = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=r, matrix=mtx)
-        for v in res['verts']: v.co += Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), rnd.uniform(-1, 1))) * r * 0.07
+        res = bmesh.ops.create_icosphere(bm, subdivisions=3, radius=r, matrix=mtx)
+        for v in res['verts']: v.co += Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), rnd.uniform(-1, 1))) * r * 0.03
     return from_bm(name, bm, m, parent, smooth=False)
-parts = [((0, 0, 0.095), 0.062, (1, 0.85, 1))]
+parts = [((0, 0, 0.095), 0.066, (1, 0.72, 0.95))]
 for k in range(8):
-    a = k / 8 * 2 * math.pi + 0.2
-    parts.append(((math.cos(a) * 0.056, 0.0, 0.095 + math.sin(a) * 0.05), 0.036, (1, 0.95, 1)))
-for k in range(5):
-    a = k / 5 * 2 * math.pi + 0.5
-    parts.append(((math.cos(a) * 0.03, -0.03, 0.095 + math.sin(a) * 0.03), 0.033, (1, 1, 1)))
-    parts.append(((math.cos(a) * 0.03, 0.03, 0.095 + math.sin(a) * 0.03), 0.033, (1, 1, 1)))
-body = faceted_cloud('claude_shape', parts, orange, cbody)
+    a = k / 8 * 2 * math.pi + math.pi / 8
+    parts.append(((math.cos(a) * 0.058, 0.0, 0.095 + math.sin(a) * 0.052), 0.034, (1, 0.8, 1)))
+body = facet(faceted_cloud('claude_shape', parts, orange, cbody), 1100)
 eyem = mat('#111111', 0.4, name='eye_black')
 c_eyes = []
 for s in (-1, 1):
-    e = cube(f'claude_eye{s}', (0.011, 0.008, 0.026), eyem, cbody, (s * 0.021, -0.068, 0.1), bevel=0.0015)
+    e = cube(f'claude_eye{s}', (0.012, 0.01, 0.03), eyem, cbody, (s * 0.022, -0.05, 0.1), bevel=0.0015)
     c_eyes.append(e)
 c_feet = []
 for i, (x, y) in enumerate([(-0.034, -0.025), (0.034, -0.025), (-0.03, 0.025), (0.03, 0.025)]):
@@ -313,7 +318,7 @@ hoodie = add_bump(mat('#1f6f68', 0.85, sheen=0.5, name='hoodie_teal'), 'noise', 
 cuffm = mat('#185953', 0.85, sheen=0.4, name='hoodie_rib')
 creamtop = mat('#f1e6d2', 0.8, name='top_cream')
 hairm = add_bump(mat('#5a3424', 0.4, name='hair_chestnut'), 'strands', 11, 0.06)
-glassm = mat('#6b3f22', 0.3, name='glasses_brown')
+glassm = mat('#1c1410', 0.3, name='glasses_dark')
 yellow = hoodie
 blacktop = creamtop
 MY = 0.74
@@ -330,21 +335,21 @@ for s in (-1, 1):
     cyl('shin', 0.065, 0.45, pants, maya, (s * 0.09, -0.3, 0.27))
 
 torso = empty('torso', maya, (0, 0, 0.52))
-blob('hoodie', [
+facet(blob('hoodie', [
     ((0, 0, 0.2), (0.165, 0.125, 0.22)),
     ((-0.13, 0, 0.33), (0.095, 0.095, 0.085)), ((0.13, 0, 0.33), (0.095, 0.095, 0.085)),   # shoulders
     ((0, 0.01, 0.05), (0.17, 0.13, 0.07)),                                                  # hem band
-], hoodie, torso)
-blob('hood', [((0, 0.09, 0.4), (0.12, 0.07, 0.07)), ((-0.08, 0.06, 0.41), (0.06, 0.06, 0.05)), ((0.08, 0.06, 0.41), (0.06, 0.06, 0.05))], cuffm, torso)
+], hoodie, torso), 520)
+facet(blob('hood', [((0, 0.09, 0.4), (0.12, 0.07, 0.07)), ((-0.08, 0.06, 0.41), (0.06, 0.06, 0.05)), ((0.08, 0.06, 0.41), (0.06, 0.06, 0.05))], cuffm, torso), 160)
 torus('tee_collar', 0.046, 0.009, creamtop, torso, (0, -0.004, 0.425), rot=(0.15, 0, 0))
 for sx in (-1, 1):
     cyl('drawstring', 0.0045, 0.16, creamtop, torso, (sx * 0.035, -0.128, 0.3), rot=(0.12, 0, 0))
     uvsphere('aglet', 0.007, creamtop, torso, (sx * 0.035, -0.138, 0.22))
 cyl('neck', 0.04, 0.09, skin, torso, (0, 0, 0.43))
 
-head = empty('head', torso, (0, 0, 0.41))
+head = empty('head', torso, (0, 0, 0.385))
 HC = Vector((0, 0, 0.15)); R = 0.15
-uvsphere('head_skin', R, skin, head, HC, scale=(1.0, 0.95, 0.98), seg=48, ring=24)
+facet(uvsphere('head_skin', R, skin, head, HC, scale=(1.0, 0.95, 0.98), seg=48, ring=24), 420)
 for s in (-1, 1): uvsphere('ear', 0.028, skin, head, HC + Vector((s * 0.148, 0.0, -0.01)), scale=(0.5, 0.8, 1))
 uvsphere('nose', 0.012, skin, head, HC + Vector((0, -0.142, -0.02)), scale=(1, 0.8, 0.8))
 # hair: top bun, centre-parted curtain bangs, face-framing strands, short nape
@@ -360,21 +365,19 @@ hair_elems = [
     (HC + Vector((0.13, -0.045, -0.09)), (0.022, 0.028, 0.06)),
     (HC + Vector((0, 0.11, -0.07)), (0.12, 0.07, 0.09)),               # short nape
 ]
-blob('hair', hair_elems, hairm, head, res=0.007)
-uvsphere('bun', 0.075, hairm, head, HC + Vector((0, 0.075, 0.205)), scale=(1, 1, 0.9))
+facet(blob('hair', hair_elems, hairm, head, res=0.007), 650)
+facet(uvsphere('bun', 0.075, hairm, head, HC + Vector((0, 0.075, 0.205)), scale=(1, 1, 0.9)), 90)
 torus('hair_tie', 0.045, 0.011, mat('#e07a5f', 0.5), head, HC + Vector((0, 0.06, 0.155)), rot=(0.35, 0, 0))
 # face
 m_eyes, brows = [], []
 for s in (-1, 1):
-    ring = torus(f'glasses{s}', 0.045, 0.0042, glassm, head, HC + Vector((s * 0.058, -0.145, 0.0)), rot=(math.pi / 2, 0, -s * 0.15))
-    eye = uvsphere(f'eye{s}', 0.011, eyem, head, HC + Vector((s * 0.056, -0.141, -0.002)), scale=(0.85, 0.5, 1.25))
-    uvsphere('eyeshine', 0.0035, mat('#ffffff', 0.3, emit='#ffffff', strength=2), eye, (0.004, -0.008, 0.005))
+    ring = torus(f'glasses{s}', 0.047, 0.0026, glassm, head, HC + Vector((s * 0.058, -0.145, 0.0)), rot=(math.pi / 2, 0, -s * 0.15))
+    eye = uvsphere(f'eye{s}', 0.0085, eyem, head, HC + Vector((s * 0.056, -0.141, -0.004)), scale=(0.85, 0.5, 1.2))
     m_eyes.append(eye)
-    b = uvsphere(f'brow{s}', 0.02, mat('#2a1c1a', 0.6), head, HC + Vector((s * 0.058, -0.137, 0.065)), scale=(1.4, 0.35, 0.22))
+    b = uvsphere(f'brow{s}', 0.016, mat('#3a2418', 0.6), head, HC + Vector((s * 0.058, -0.137, 0.065)), scale=(1.4, 0.3, 0.16))
     b.rotation_euler = (0, s * 0.08, 0); brows.append(b)
-    blush = uvsphere('blush', 0.022, mat('#f19a95', 0.6), head, HC + Vector((s * 0.085, -0.122, -0.045)), scale=(1, 0.3, 0.6))
 cube('bridge', (0.022, 0.004, 0.004), glassm, head, HC + Vector((0, -0.152, 0.005)))
-mouth = uvsphere('mouth', 0.012, mat('#4a1d1d', 0.6), head, HC + Vector((0, -0.141, -0.07)), scale=(1.1, 0.35, 0.45))
+mouth = uvsphere('mouth', 0.01, mat('#2a1414', 0.6), head, HC + Vector((0, -0.142, -0.068)), scale=(1.3, 0.3, 0.25))
 
 # arms: shoulder pivot -> upper arm, elbow pivot -> forearm + mitten
 def capsule(name, r, length, m, parent):
@@ -382,10 +385,10 @@ def capsule(name, r, length, m, parent):
 arms = {}
 for s in (-1, 1):
     sh = empty(f'shoulder{s}', torso, (s * 0.165, 0, 0.34)); sh.rotation_mode = 'QUATERNION'
-    capsule(f'upper{s}', 0.055, 0.2, yellow, sh)
+    facet(capsule(f'upper{s}', 0.055, 0.2, yellow, sh), 140)
     el = empty(f'elbow{s}', sh, (0, 0, -0.19)); el.rotation_mode = 'QUATERNION'
-    capsule(f'fore{s}', 0.05, 0.19, yellow, el)
-    uvsphere(f'hand{s}', 0.04, skin, el, (0, 0, -0.205), scale=(0.95, 0.8, 1.1))
+    facet(capsule(f'fore{s}', 0.05, 0.19, yellow, el), 140)
+    facet(uvsphere(f'hand{s}', 0.04, skin, el, (0, 0, -0.205), scale=(0.95, 0.8, 1.1)), 80)
     arms[s] = (sh, el)
 
 # ------------------------------------------------------------------ animation
@@ -456,22 +459,22 @@ def animate(t):
     cbody.rotation_euler = (0, roll + wob(t, 1.3) * 0.02, 0)
     blink = 0.12 if ((t + 0.4) % 3.3) < 0.11 else 1
     for k, e in enumerate(c_eyes):
-        e.scale = (1, 1, eye_h * blink); e.location.x = (1 if k else -1) * 0.021 + eye_x
+        e.scale = (1, 1, eye_h * blink); e.location.x = (1 if k else -1) * 0.022 + eye_x
     ticks.scale = (1, 1, 1) if (L['who'] == 'C' and L['act'] == 'excited' and since < 1.6) else (0, 0, 0)
     # Maya
     me = env_s(t, 'M')
     lean = ease(prog(since, -0.2, 0.35)) * (1 - ease(prog(since, L['d'] + 0.2, 0.5))) if (L['who'] == 'M' and L['act'] == 'lean') else 0
-    torso.rotation_euler = (0.05 + lean * 0.18 + wob(t, 1.1) * 0.01, 0, 0)
+    torso.rotation_euler = (0.13 + lean * 0.15 + wob(t, 1.1) * 0.01, 0, 0)
     torso.location.z = 0.52 + wob(t, 1.6) * 0.002
     hx = 0.12 - lean * 0.08 + me * 0.05 * math.sin(t * 9)
     hz = -0.3 + wob(t, 0.6) * 0.04 + (-0.05 if L['who'] == 'C' else 0)
     hy = (0.07 if (L['who'] == 'M' and L['act'] == 'gesture') else 0) + wob(t, 0.8) * 0.02
     head.rotation_euler = (hx, hy, hz)
-    mouth.scale = (1.0 + me * 0.4, 0.35, 0.3 + me * 1.9)
+    mouth.scale = (1.3 - me * 0.3, 0.3, 0.22 + me * 1.5)
     by = 0.065 + me * 0.008 - (0.006 if (L['who'] == 'C' and L['act'] in ('look-away', 'squint')) else 0)
     for b in brows: b.location.z = HC.z + by
     mb = 0.1 if ((t + 1.3) % 4.1) < 0.13 else 1
-    for e in m_eyes: e.scale = (0.85, 0.5, 1.25 * mb)
+    for e in m_eyes: e.scale = (0.85, 0.5, 1.2 * mb)
     k = ease(prog(t, L['t'] - 0.3, 0.45)); P = LINES[i - 1] if i else L
     for s, (sh, el) in arms.items():
         a0, b0 = POSES[pose_name(P)](s); a1, b1 = POSES[pose_name(L)](s)
@@ -510,7 +513,7 @@ scene.cycles.use_denoising = True
 scene.cycles.max_bounces = 4; scene.cycles.diffuse_bounces = 2; scene.cycles.glossy_bounces = 2; scene.cycles.transmission_bounces = 2
 scene.cycles.use_adaptive_sampling = True
 scene.view_settings.view_transform = 'AgX'; scene.view_settings.look = 'AgX - Punchy'
-scene.view_settings.exposure = -0.1
+scene.view_settings.exposure = 0.0
 scene.render.image_settings.file_format = 'JPEG'; scene.render.image_settings.quality = 92
 # audio in the .blend so it plays in sync when opened
 if os.path.exists(os.path.join(HERE, 'dialogue.wav')):
