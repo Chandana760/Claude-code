@@ -1,0 +1,640 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>API Explainer Reel</title>
+<style>
+  html, body { margin: 0; background: #0b1020; overflow: hidden; }
+  canvas { display: block; }
+  #out { position: absolute; left: 0; top: 0; }
+  #gl { position: absolute; left: 0; top: 0; visibility: hidden; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./node_modules/three/build/three.module.js",
+               "three/addons/": "./node_modules/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<canvas id="out"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// ---------------------------------------------------------------- setup
+const P = new URLSearchParams(location.search);
+const W = +(P.get('w') || 1080), H = +(P.get('h') || 1920);
+const FPS = 30;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H);
+renderer.domElement.id = 'gl';
+document.body.appendChild(renderer.domElement);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const out = document.getElementById('out');
+out.width = W; out.height = H;
+const octx = out.getContext('2d');
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0d1428');
+const camera = new THREE.PerspectiveCamera(45, W / H, 0.05, 200);
+
+// deterministic random
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// ---------------------------------------------------------------- palette (from the brand sheet)
+const C = {
+  navy: '#141b33', teal: '#17584c', cream: '#f1e6d2', beige: '#d9c3a0', orange: '#e8743b',
+  purple: '#7c3fc4', mint: '#5fd6b8', skin: '#dd9068', hair: '#3a2422', wood: '#5a3a28',
+  woodDark: '#3a271d', black: '#121212',
+};
+const mats = {};
+function M(color, opts = {}) {
+  const key = color + JSON.stringify(opts);
+  if (!mats[key]) mats[key] = new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, metalness: 0, ...opts });
+  return mats[key];
+}
+function mesh(geo, mat, x = 0, y = 0, z = 0, parent = scene, shadow = true) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = shadow; m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+// jitter vertices for the hand-made low-poly look (keeps shared verts together)
+function facet(geo, amt, seed = 1) {
+  geo = geo.index ? geo.toNonIndexed() : geo;
+  const r = rng(seed), p = geo.attributes.position, map = new Map();
+  for (let i = 0; i < p.count; i++) {
+    const k = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`;
+    if (!map.has(k)) map.set(k, [(r() - .5) * amt, (r() - .5) * amt, (r() - .5) * amt]);
+    const d = map.get(k);
+    p.setXYZ(i, p.getX(i) + d[0], p.getY(i) + d[1], p.getZ(i) + d[2]);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+const blob = (r, detail = 1, j = 0.12, seed = 1) => facet(new THREE.IcosahedronGeometry(r, detail), r * j, seed);
+
+// ---------------------------------------------------------------- lights
+const hemi = new THREE.HemisphereLight('#c9a3ff', '#4a2e20', 0.6); scene.add(hemi);
+const lampLight = new THREE.PointLight('#ffb36b', 9, 6, 1.6);
+lampLight.position.set(1.55, 1.55, 0.05); lampLight.castShadow = true;
+lampLight.shadow.mapSize.set(1024, 1024); lampLight.shadow.bias = -0.002; lampLight.shadow.radius = 4;
+scene.add(lampLight);
+const moon = new THREE.DirectionalLight('#ff94b8', 1.3);
+moon.position.set(-2, 4, -6); scene.add(moon);
+const key = new THREE.DirectionalLight('#ffe2c4', 1.15);
+key.position.set(1.2, 3.2, 3.5); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0008; key.shadow.normalBias = 0.02;
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -1, near: 0.5, far: 12 });
+scene.add(key);
+const fill = new THREE.PointLight('#ffc9a0', 2.2, 3, 1.5); fill.position.set(0.0, 1.75, 0.7); scene.add(fill);
+const rim = new THREE.DirectionalLight('#b07cff', 0.7); rim.position.set(-3, 2, -2); scene.add(rim);
+
+// ---------------------------------------------------------------- room
+mesh(box(9, 0.1, 8), M('#3b2a22'), 0, -0.05, 0);                    // floor
+// floor planks
+for (let i = -8; i <= 8; i++) mesh(box(0.012, 0.004, 8), M('#2c1f19'), i * 0.28, 0.002, 0, scene, false);
+mesh(new THREE.CylinderGeometry(1.4, 1.4, 0.012, 9), M('#27304f'), 0.2, 0.006, 0.2, scene, false); // rug
+
+// back wall with a big window
+const wallMat = M('#1a2140');
+mesh(box(9, 0.9, 0.2), wallMat, 0, 0.45, -3);
+mesh(box(9, 0.8, 0.2), wallMat, 0, 3.6, -3);
+mesh(box(2.0, 2.4, 0.2), wallMat, -3.5, 2.1, -3);
+mesh(box(2.0, 2.4, 0.2), wallMat, 3.5, 2.1, -3);
+for (const x of [-2.5, -0.85, 0.85, 2.5]) mesh(box(0.07, 2.4, 0.12), M('#0d1120'), x, 2.1, -2.95);
+mesh(box(5.2, 0.07, 0.12), M('#0d1120'), 0, 2.1, -2.95);
+mesh(box(5.4, 0.08, 0.35), M('#232a48'), 0, 0.92, -2.85);         // sill
+mesh(box(0.2, 5, 8), wallMat, -4.5, 2.5, 0);                         // side walls
+mesh(box(0.2, 5, 8), wallMat, 4.5, 2.5, 0);
+
+// night sky + city
+{
+  const sky = document.createElement('canvas'); sky.width = 4; sky.height = 256;
+  const g = sky.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#24154a'); gr.addColorStop(0.45, '#6e3384'); gr.addColorStop(0.75, '#c8557c'); gr.addColorStop(1, '#f39a6b');
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+  const t = new THREE.CanvasTexture(sky); t.colorSpace = THREE.SRGBColorSpace;
+  mesh(new THREE.PlaneGeometry(80, 30), new THREE.MeshBasicMaterial({ map: t }), 0, 8, -40, scene, false);
+  const r = rng(7);
+  function winTex(seed) {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 128;
+    const x = c.getContext('2d'), rr = rng(seed);
+    x.fillStyle = '#1d1233'; x.fillRect(0, 0, 64, 128);
+    for (let yy = 4; yy < 124; yy += 10) for (let xx = 4; xx < 60; xx += 9)
+      if (rr() < 0.38) { x.fillStyle = rr() < 0.75 ? '#ffd58a' : '#9fd0ff'; x.fillRect(xx, yy, 5, 5); }
+    const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.magFilter = THREE.NearestFilter;
+    return tx;
+  }
+  const texes = [1, 2, 3, 4, 5].map(winTex);
+  for (let i = 0; i < 46; i++) {
+    const w = 0.8 + r() * 1.6, h = 2 + r() * 9, z = -9 - r() * 18, x = -14 + r() * 28;
+    const tx = texes[i % 5].clone(); tx.needsUpdate = true; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(w / 1.2, h / 2.4);
+    mesh(box(w, h, w), new THREE.MeshBasicMaterial({ map: tx, color: '#9a86c8' }), x, h / 2 - 0.5, z, scene, false);
+  }
+}
+
+// bookshelf (left)
+{
+  const g = new THREE.Group(); g.position.set(-2.55, 0, -2.2); g.rotation.y = 0.35; scene.add(g);
+  mesh(box(1.1, 2.4, 0.38), M('#3d2a20'), 0, 1.2, 0, g);
+  const r = rng(11), cols = ['#c8553d', '#2f7f7a', '#e0b84a', '#6a4bb5', '#d98c5f', '#3f6fb5', '#9bb84a', '#e46a8a'];
+  for (let s = 0; s < 4; s++) {
+    const y = 0.25 + s * 0.55;
+    mesh(box(1.04, 0.04, 0.34), M('#2b1d16'), 0, y, 0.02, g);
+    let x = -0.47;
+    while (x < 0.45) { const w = 0.05 + r() * 0.05, h = 0.26 + r() * 0.16;
+      const b = mesh(box(w, h, 0.26), M(cols[Math.floor(r() * cols.length)]), x + w / 2, y + 0.02 + h / 2, 0.04, g);
+      if (r() < 0.12) b.rotation.z = 0.25; x += w + 0.006; }
+  }
+}
+
+// purple bean bag (codex colour) back right
+mesh(blob(0.5, 1, 0.18, 3), M(C.purple), 2.6, 0.32, -1.9).scale.set(1.2, 0.65, 1.1);
+
+// tall plant in the corner
+function plant(x, z, s, seed) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); scene.add(g);
+  mesh(new THREE.CylinderGeometry(0.17, 0.13, 0.32, 7), M('#c9b49a'), 0, 0.16, 0, g);
+  const r = rng(seed);
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.4, h = 0.45 + r() * 0.5;
+    const leaf = mesh(new THREE.ConeGeometry(0.09, 0.42, 4), M(i % 2 ? '#3f8a4f' : '#2f6e40'), Math.cos(a) * 0.12, 0.3 + h, Math.sin(a) * 0.12, g);
+    leaf.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6);
+  }
+  return g;
+}
+plant(-3.4, -2.3, 2.0, 5);
+plant(3.6, -2.4, 1.6, 9);
+
+// ---------------------------------------------------------------- desk + props
+const DESK_Y = 0.76;
+mesh(box(2.8, 0.07, 1.05), M(C.wood), 0.25, DESK_Y - 0.035, 0.0);
+mesh(box(2.8, 0.02, 1.05), M('#6b4733'), 0.25, DESK_Y + 0.001, 0.0, scene, false);
+for (const [x, z] of [[-1.05, -0.45], [1.55, -0.45], [-1.05, 0.45], [1.55, 0.45]]) mesh(box(0.07, DESK_Y - 0.07, 0.07), M(C.woodDark), x, (DESK_Y - 0.07) / 2, z);
+mesh(box(2.6, 0.35, 0.03), M(C.woodDark), 0.25, DESK_Y - 0.25, -0.48);
+
+// laptop in front of Maya (back toward camera)
+{
+  const g = new THREE.Group(); g.position.set(0.55, DESK_Y, -0.08); g.rotation.y = -0.5; g.visible = false; scene.add(g);
+  mesh(box(0.42, 0.018, 0.29), M('#9aa3b5', { roughness: 0.4, metalness: 0.3 }), 0, 0.009, 0, g);
+  const lid = new THREE.Group(); lid.position.set(0, 0.018, 0.14); lid.rotation.x = 0.28; g.add(lid);
+  mesh(box(0.42, 0.28, 0.014), M('#aab2c4', { roughness: 0.4, metalness: 0.3 }), 0, 0.14, 0, lid);
+  mesh(new THREE.PlaneGeometry(0.39, 0.25), new THREE.MeshBasicMaterial({ color: '#7fa8ff' }), 0, 0.14, -0.008, lid, false).rotation.y = Math.PI;
+  const glow = new THREE.PointLight('#7fa8ff', 0.8, 1.2); glow.position.set(0, 0.2, -0.1); g.add(glow);
+}
+// mug
+{
+  const g = new THREE.Group(); g.position.set(0.78, DESK_Y, 0.2); scene.add(g);
+  mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.11, 10), M('#f4efe6'), 0, 0.055, 0, g);
+  mesh(new THREE.TorusGeometry(0.03, 0.009, 5, 10), M('#f4efe6'), 0.055, 0.06, 0, g).rotation.y = 0;
+  mesh(new THREE.CylinderGeometry(0.044, 0.044, 0.005, 10), M('#4a2a1a'), 0, 0.1, 0, g, false);
+}
+// monitor with code + keyboard
+{
+  const g = new THREE.Group(); g.position.set(1.0, DESK_Y, -0.28); g.rotation.y = -0.55; scene.add(g);
+  mesh(box(0.2, 0.015, 0.14), M('#2a2f45'), 0, 0.008, 0, g);
+  mesh(box(0.04, 0.22, 0.03), M('#2a2f45'), 0, 0.12, -0.02, g);
+  mesh(box(0.62, 0.38, 0.03), M('#1b1f2e'), 0, 0.42, 0, g);
+  const c = document.createElement('canvas'); c.width = 512; c.height = 300; const x = c.getContext('2d'), r = rng(42);
+  x.fillStyle = '#0f1424'; x.fillRect(0, 0, 512, 300);
+  for (let i = 0; i < 16; i++) { let px = 16 + (r() < 0.5 ? 0 : 24) + (r() < 0.3 ? 24 : 0);
+    for (let k = 0; k < 1 + r() * 4; k++) { const w = 20 + r() * 70; x.fillStyle = ['#7aa2ff', '#e8743b', '#5fd6b8', '#c792ea', '#d7dbe6'][Math.floor(r() * 5)]; x.fillRect(px, 14 + i * 17, w, 8); px += w + 8; } }
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
+  mesh(new THREE.PlaneGeometry(0.58, 0.34), new THREE.MeshBasicMaterial({ map: tx }), 0, 0.42, 0.016, g, false);
+  const glow = new THREE.PointLight('#7fa8ff', 0.6, 1.4); glow.position.set(0, 0.42, 0.3); g.add(glow);
+}
+{
+  const g = new THREE.Group(); g.position.set(0.55, DESK_Y, -0.02); g.rotation.y = -0.3; scene.add(g);
+  mesh(box(0.44, 0.02, 0.15), M('#2a2f45'), 0, 0.01, 0, g);
+  for (let i = 0; i < 4; i++) for (let k = 0; k < 11; k++) mesh(box(0.032, 0.012, 0.028), M('#3a4060'), -0.19 + k * 0.038, 0.024, -0.05 + i * 0.034, g, false);
+}
+// pen cup
+{
+  const g = new THREE.Group(); g.position.set(-0.75, DESK_Y, -0.3); scene.add(g);
+  mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.12, 8), M(C.teal), 0, 0.06, 0, g);
+  ['#e8743b', '#5fd6b8', '#7c3fc4', '#e0b84a'].forEach((c, i) => {
+    const p = mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.16, 5), M(c), (i - 1.5) * 0.015, 0.15, (i % 2) * 0.01, g);
+    p.rotation.z = (i - 1.5) * 0.12;
+  });
+}
+// notebook
+mesh(box(0.22, 0.015, 0.3), M('#e46a8a'), 0.3, DESK_Y + 0.008, 0.3).rotation.y = 0.3;
+mesh(box(0.2, 0.012, 0.28), M('#f6f1e7'), 0.3, DESK_Y + 0.02, 0.3).rotation.y = 0.32;
+// desk lamp
+{
+  const g = new THREE.Group(); g.position.set(1.42, DESK_Y, -0.2); scene.add(g);
+  mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.03, 9), M('#2a2f45'), 0, 0.015, 0, g);
+  const a = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.6, 6), M('#2a2f45'), 0, 0.3, 0, g); a.rotation.z = 0.15;
+  const b = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.45, 6), M('#2a2f45'), 0.12, 0.72, 0.1, g); b.rotation.set(0.5, 0, 0.9);
+  const head = mesh(new THREE.ConeGeometry(0.12, 0.16, 8, 1, true), M('#2a2f45', { side: THREE.DoubleSide }), 0.15, 0.82, 0.25, g);
+  head.rotation.set(0.9, 0, 0.6);
+  mesh(new THREE.SphereGeometry(0.045, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffe2a8' }), 0.14, 0.78, 0.27, g, false);
+}
+// small desk plant
+plant(1.25, 0.32, 0.45, 13).position.y = DESK_Y;
+
+// book stack Claude stands on
+const BOOKS = { x: -0.85, z: 0.0 };
+let stackTop = DESK_Y;
+for (const [c, h, w, rot] of [['#3f9a5a', 0.075, 0.36, 0.05], ['#7c3fc4', 0.07, 0.34, -0.06], ['#e5c04a', 0.075, 0.33, 0.03]]) {
+  const b = mesh(box(w, h, 0.26), M(c), BOOKS.x, stackTop + h / 2, BOOKS.z); b.rotation.y = rot;
+  mesh(box(w - 0.02, h - 0.016, 0.005), M('#f3ecdc'), BOOKS.x, stackTop + h / 2, BOOKS.z + 0.131, scene, false).rotation.y = rot;
+  stackTop += h;
+}
+
+// ---------------------------------------------------------------- whiteboard (drawn every frame on a canvas)
+const BOARD = { x: -0.66, y: 1.92, z: -1.35, w: 1.62, h: 1.0 };
+const bc = document.createElement('canvas'); bc.width = 1296; bc.height = 800;
+const bx = bc.getContext('2d');
+const boardTex = new THREE.CanvasTexture(bc); boardTex.colorSpace = THREE.SRGBColorSpace; boardTex.anisotropy = 8;
+{
+  const g = new THREE.Group(); g.position.set(BOARD.x, 0, BOARD.z); g.rotation.y = 0.1; scene.add(g);
+  mesh(box(BOARD.w + 0.08, BOARD.h + 0.08, 0.04), M('#c7ccd6', { roughness: 0.4, metalness: 0.4 }), 0, BOARD.y, -0.02, g);
+  const surf = mesh(new THREE.PlaneGeometry(BOARD.w, BOARD.h), new THREE.MeshStandardMaterial({ map: boardTex, roughness: 0.55, emissive: '#ffffff', emissiveMap: boardTex, emissiveIntensity: 0.18 }), 0, BOARD.y, 0.001, g, false);
+  surf.receiveShadow = true;
+  mesh(box(BOARD.w * 0.9, 0.025, 0.07), M('#c7ccd6'), 0, BOARD.y - BOARD.h / 2 - 0.03, 0.03, g);
+  ['#d6453d', '#2f6fd6', '#2e9b57'].forEach((c, i) => mesh(box(0.1, 0.018, 0.018), M(c), -0.2 + i * 0.13, BOARD.y - BOARD.h / 2 - 0.005, 0.04, g));
+  for (const s of [-1, 1]) { const l = mesh(box(0.035, BOARD.y + 0.1, 0.035), M('#8a919f'), s * (BOARD.w / 2 - 0.05), (BOARD.y + 0.1) / 2 - 0.05, -0.04, g); l.rotation.x = 0.02;
+    mesh(box(0.035, 0.035, 0.5), M('#8a919f'), s * (BOARD.w / 2 - 0.05), 0.02, -0.04, g); }
+}
+
+// board drawing helpers — p = 0..1 reveal progress
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const ease = x => x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x);
+const prog = (t, a, d) => clamp((t - a) / d);
+function writeText(txt, x, y, size, color, p, weight = 700, align = 'left') {
+  if (p <= 0) return;
+  bx.save(); bx.font = `${weight} ${size}px Inter`; bx.fillStyle = color; bx.textAlign = align; bx.textBaseline = 'middle';
+  const w = bx.measureText(txt).width, x0 = align === 'center' ? x - w / 2 : x;
+  bx.beginPath(); bx.rect(x0 - 4, y - size, (w + 8) * p, size * 2); bx.clip();
+  bx.fillText(txt, x, y); bx.restore();
+}
+function strokePath(pts, color, width, p) { // polyline revealed by length
+  if (p <= 0) return;
+  let total = 0; for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  let left = total * p;
+  bx.save(); bx.strokeStyle = color; bx.lineWidth = width; bx.lineCap = 'round'; bx.lineJoin = 'round';
+  bx.beginPath(); bx.moveTo(...pts[0]);
+  let end = pts[0];
+  for (let i = 1; i < pts.length && left > 0; i++) {
+    const [ax, ay] = pts[i - 1], [cx, cy] = pts[i], seg = Math.hypot(cx - ax, cy - ay), f = Math.min(1, left / seg);
+    end = [ax + (cx - ax) * f, ay + (cy - ay) * f]; bx.lineTo(...end); left -= seg;
+  }
+  bx.stroke(); bx.restore();
+  return end;
+}
+function arrow(x1, y1, x2, y2, color, p, width = 7) {
+  if (p <= 0) return;
+  const e = strokePath([[x1, y1], [x2, y2]], color, width, p);
+  if (p > 0.95) { const a = Math.atan2(y2 - y1, x2 - x1);
+    strokePath([[x2 - 26 * Math.cos(a - 0.5), y2 - 26 * Math.sin(a - 0.5)], [x2, y2], [x2 - 26 * Math.cos(a + 0.5), y2 - 26 * Math.sin(a + 0.5)]], color, width, 1); }
+}
+function rectPath(x, y, w, h) { return [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]]; }
+const INK = '#1d2433', BLUE = '#2f6fd6', RED = '#d6453d', GREEN = '#2e9b57';
+
+function drawBoard(t) {
+  bx.fillStyle = '#f7f8fb'; bx.fillRect(0, 0, bc.width, bc.height);
+  // faint ghosting of old marker
+  bx.globalAlpha = 0.05; bx.fillStyle = '#556'; bx.fillRect(900, 620, 300, 40); bx.fillRect(120, 650, 220, 30); bx.globalAlpha = 1;
+  writeText('What is an API?', 648, 92, 74, INK, 1, 800, 'center');
+  strokePath([[340, 150], [956, 150]], INK, 6, 1);
+
+  // 1. you (laptop) — "You ask"
+  const pA = prog(t, 8.2, 1.4);
+  strokePath(rectPath(110, 300, 190, 125), INK, 7, pA);
+  strokePath([[80, 445], [330, 445], [310, 425], [100, 425], [80, 445]], INK, 7, prog(t, 8.9, 0.6));
+  writeText('You', 205, 515, 54, INK, prog(t, 9.4, 0.6), 700, 'center');
+  writeText('(the customer)', 205, 570, 34, '#6a7285', prog(t, 9.9, 0.7), 600, 'center');
+
+  // 2. kitchen / server
+  const pB = prog(t, 12.2, 1.4);
+  strokePath(rectPath(985, 285, 210, 175), INK, 7, pB);
+  for (let i = 0; i < 3; i++) strokePath([[1005, 330 + i * 45], [1175, 330 + i * 45]], INK, 5, prog(t, 12.9 + i * 0.2, 0.5));
+  writeText('Kitchen', 1090, 515, 54, INK, prog(t, 13.4, 0.6), 700, 'center');
+  writeText('(the server)', 1090, 570, 34, '#6a7285', prog(t, 13.9, 0.7), 600, 'center');
+  writeText('STAFF ONLY', 1090, 255, 30, RED, prog(t, 14.3, 0.6), 800, 'center');
+
+  // 3. API waiter in the middle + order arrow
+  strokePath(rectPath(540, 300, 215, 120), BLUE, 8, prog(t, 15.9, 1.0));
+  writeText('API', 648, 362, 70, BLUE, prog(t, 16.6, 0.5), 800, 'center');
+  writeText('(the waiter)', 648, 470, 34, BLUE, prog(t, 17.0, 0.6), 600, 'center');
+  arrow(320, 335, 520, 335, INK, prog(t, 17.4, 0.7));
+  arrow(775, 335, 965, 335, INK, prog(t, 18.2, 0.7));
+  writeText('order', 420, 300, 32, INK, prog(t, 17.6, 0.5), 600, 'center');
+
+  // 4. answer comes back
+  arrow(965, 400, 775, 400, GREEN, prog(t, 19.9, 0.7));
+  arrow(520, 400, 320, 400, GREEN, prog(t, 20.7, 0.7));
+  writeText('your answer', 420, 440, 32, GREEN, prog(t, 21.3, 0.6), 700, 'center');
+
+  // 5. extra notes
+  writeText('menu = the docs', 110, 655, 44, GREEN, prog(t, 26.6, 1.0), 700, 'left');
+  writeText('error 500 = kitchen on fire', 110, 730, 40, RED, prog(t, 32.2, 1.2), 700, 'left');
+  if (t > 33.4) { // little flame
+    const f = Math.min(1, (t - 33.4) * 3), fl = Math.sin(t * 20) * 4;
+    bx.save(); bx.globalAlpha = f; bx.fillStyle = '#ff7a2f';
+    bx.beginPath(); bx.moveTo(1090, 288); bx.quadraticCurveTo(1045, 240 + fl, 1070, 190); bx.quadraticCurveTo(1085, 230, 1100, 210 - fl); bx.quadraticCurveTo(1135, 245, 1090, 288); bx.fill();
+    bx.fillStyle = '#ffd23f'; bx.beginPath(); bx.moveTo(1090, 288); bx.quadraticCurveTo(1068, 255, 1086, 228 + fl); bx.quadraticCurveTo(1112, 258, 1090, 288); bx.fill(); bx.restore();
+  }
+  boardTex.needsUpdate = true;
+}
+
+// ---------------------------------------------------------------- CLAUDE (orange faceted companion)
+const claude = new THREE.Group(); scene.add(claude);
+const claudeBody = new THREE.Group(); claude.add(claudeBody);
+const CL = { x: -0.2, y: DESK_Y, z: 0.12 };
+{
+  const parts = [];
+  parts.push(blob(0.125, 1, 0.1, 21));
+  const n = 7;
+  for (let i = 0; i < n; i++) { // flower-like outline lobes
+    const a = (i / n) * Math.PI * 2 + 0.2, g = blob(0.068, 1, 0.12, 30 + i);
+    g.translate(Math.cos(a) * 0.105, Math.sin(a) * 0.1 + 0.005, -0.005); parts.push(g);
+  }
+  for (let i = 0; i < 4; i++) { const g = blob(0.06, 1, 0.12, 50 + i); const a = (i / 4) * Math.PI * 2; g.translate(Math.cos(a) * 0.06, Math.sin(a) * 0.06, 0.055); parts.push(g); }
+  for (let i = 0; i < 4; i++) { const g = blob(0.06, 1, 0.12, 60 + i); const a = (i / 4) * Math.PI * 2 + 0.7; g.translate(Math.cos(a) * 0.06, Math.sin(a) * 0.06, -0.06); parts.push(g); }
+  const body = mergeGeometries(parts.map(p => p.index ? p.toNonIndexed() : p));
+  body.computeVertexNormals();
+  const bm = mesh(body, new THREE.MeshStandardMaterial({ color: C.orange, flatShading: true, roughness: 0.75, emissive: '#5a1d05', emissiveIntensity: 0.25 }), 0, 0.17, 0, claudeBody);
+  bm.scale.set(1, 0.95, 0.82);
+}
+const eyeMat = new THREE.MeshBasicMaterial({ color: '#141414' });
+const cEyes = [-1, 1].map(s => mesh(box(0.026, 0.058, 0.012), eyeMat, s * 0.042, 0.185, 0.122, claudeBody, false));
+const cFeet = [];
+for (const [x, z] of [[-0.065, 0.03], [0.065, 0.03], [-0.035, -0.04], [0.035, -0.04]]) cFeet.push(mesh(blob(0.04, 1, 0.12, 70 + cFeet.length), M('#d8652f'), x, 0.035, z, claude));
+// "excited" tick marks
+const ticks = new THREE.Group(); claudeBody.add(ticks);
+[-0.35, 0, 0.35].forEach((a, i) => { const t = mesh(box(0.012, 0.05, 0.012), new THREE.MeshBasicMaterial({ color: '#ffd23f' }), Math.sin(a) * 0.2, 0.36 + Math.cos(a) * 0.04 * (i === 1 ? 1.4 : 1), 0, ticks, false); t.rotation.z = -a; });
+// pointer stick (floats at Claude's side, aimed at the board)
+const pointer = new THREE.Group(); scene.add(pointer);
+mesh(new THREE.CylinderGeometry(0.006, 0.01, 1, 6), M('#efe6cf'), 0, 0.5, 0, pointer, true);
+mesh(new THREE.SphereGeometry(0.012, 6, 4), M('#d6453d'), 0, 1.0, 0, pointer, false);
+
+// ---------------------------------------------------------------- MAYA (host)
+const maya = new THREE.Group(); scene.add(maya);
+const MAYA = { x: 0.3, z: -0.72, rot: -0.1 };
+maya.position.set(MAYA.x, 0, MAYA.z); maya.rotation.y = MAYA.rot;
+const skin = M(C.skin, { roughness: 0.7 }), jacket = M(C.teal), cream = M(C.cream), pants = M(C.beige), hairM = M(C.hair, { roughness: 0.8 });
+// chair
+mesh(box(0.5, 0.06, 0.48), M('#20666a'), 0, 0.48, -0.05, maya);
+mesh(box(0.5, 0.55, 0.06), M('#20666a'), 0, 0.82, -0.3, maya).rotation.x = -0.1;
+mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.42, 6), M('#2a2f45'), 0, 0.24, -0.05, maya);
+mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.03, 5), M('#2a2f45'), 0, 0.03, -0.05, maya);
+// legs (seated)
+for (const s of [-1, 1]) {
+  mesh(facet(new THREE.CylinderGeometry(0.085, 0.09, 0.4, 7), 0.01, 80 + s), pants, s * 0.1, 0.56, 0.12, maya).rotation.x = Math.PI / 2;
+  mesh(facet(new THREE.CylinderGeometry(0.08, 0.085, 0.45, 7), 0.01, 82 + s), pants, s * 0.1, 0.3, 0.32, maya);
+  mesh(box(0.13, 0.07, 0.22), M('#f4f1ea'), s * 0.1, 0.04, 0.37, maya);
+}
+// torso
+const torso = new THREE.Group(); torso.position.set(0, 0.55, 0); maya.add(torso);
+mesh(facet(new THREE.CylinderGeometry(0.17, 0.215, 0.52, 8), 0.018, 90), jacket, 0, 0.28, 0, torso);
+mesh(facet(new THREE.CylinderGeometry(0.11, 0.15, 0.4, 6, 1, false, -0.9, 1.8), 0.01, 91), cream, 0, 0.3, 0.035, torso);
+mesh(blob(0.1, 1, 0.15, 92), jacket, -0.17, 0.48, 0, torso).scale.set(1, 0.8, 1.1);  // shoulders
+mesh(blob(0.1, 1, 0.15, 93), jacket, 0.17, 0.48, 0, torso).scale.set(1, 0.8, 1.1);
+mesh(blob(0.09, 1, 0.1, 94), jacket, -0.09, 0.53, 0.06, torso).scale.set(1, 0.5, 0.6);   // collar
+mesh(blob(0.09, 1, 0.1, 95), jacket, 0.09, 0.53, 0.06, torso).scale.set(1, 0.5, 0.6);
+mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.08, 7), skin, 0, 0.6, 0, torso);
+// arms: shoulder -> elbow -> mitten
+function arm(side) {
+  const sh = new THREE.Group(); sh.position.set(side * 0.2, 0.46, 0.01); torso.add(sh);
+  mesh(facet(new THREE.CylinderGeometry(0.065, 0.07, 0.3, 7), 0.01, 100 + side), jacket, 0, -0.15, 0, sh);
+  const el = new THREE.Group(); el.position.set(0, -0.29, 0); sh.add(el);
+  mesh(facet(new THREE.CylinderGeometry(0.06, 0.065, 0.28, 7), 0.01, 102 + side), jacket, 0, -0.14, 0, el);
+  mesh(blob(0.062, 1, 0.08, 104 + side), skin, 0, -0.3, 0.005, el).scale.set(0.95, 1.15, 0.8);  // mitten hand
+  return { sh, el };
+}
+const armL = arm(-1), armR = arm(1);
+// head
+const head = new THREE.Group(); head.position.set(0, 0.61, 0.02); torso.add(head);
+const HEAD_R = 0.2;
+mesh(blob(HEAD_R, 2, 0.04, 110), skin, 0, 0.18, 0, head).scale.set(1, 1.02, 0.95);
+mesh(blob(0.035, 1, 0.1, 111), skin, -0.195, 0.16, 0, head); mesh(blob(0.035, 1, 0.1, 112), skin, 0.195, 0.16, 0, head); // ears
+mesh(blob(0.018, 0, 0.1, 113), M('#e8b393'), 0, 0.15, 0.19, head);  // nose
+// hair: cap + bangs + long wavy locks
+{
+  const cap = mesh(blob(0.225, 1, 0.1, 120), hairM, 0, 0.245, -0.035, head); cap.scale.set(1.06, 0.98, 1.05);
+  const r = rng(121);
+  const bangs = [[-0.12, 0.33, 0.14, 0.09], [-0.03, 0.35, 0.165, 0.085], [0.06, 0.345, 0.16, 0.085], [0.14, 0.32, 0.13, 0.08], [-0.17, 0.27, 0.11, 0.07], [0.18, 0.27, 0.1, 0.07]];
+  bangs.forEach(([x, y, z, s], i) => mesh(blob(s, 1, 0.2, 130 + i), hairM, x, y, z, head).scale.set(1.25, 0.75, 0.75));
+  for (const side of [-1, 1]) for (let i = 0; i < 6; i++) { // long locks falling past shoulders
+    const y = 0.2 - i * 0.075, x = side * (0.2 + Math.sin(i * 1.3) * 0.025 + i * 0.012), z = -0.02 - i * 0.012 + (r() - 0.5) * 0.04;
+    mesh(blob(0.085 - i * 0.003, 1, 0.22, 140 + i + (side + 1) * 10), hairM, x, y, z, head).scale.set(0.85, 1.2, 1);
+  }
+  for (let i = 0; i < 7; i++) { // back mass
+    const a = (i / 6 - 0.5) * 2.2;
+    mesh(blob(0.1, 1, 0.2, 170 + i), hairM, Math.sin(a) * 0.16, 0.05 - Math.abs(a) * 0.03 - (i % 2) * 0.05, -0.12 - Math.cos(a) * 0.04, head).scale.set(1, 1.6, 0.9);
+  }
+}
+// face: glasses, eyes, brows, mouth, blush
+const black = new THREE.MeshStandardMaterial({ color: '#141414', roughness: 0.4 });
+const mEyes = [], brows = [];
+for (const s of [-1, 1]) {
+  const ring = mesh(new THREE.TorusGeometry(0.058, 0.0085, 6, 18), black, s * 0.075, 0.19, 0.2, head, false);
+  ring.rotation.y = s * 0.18;
+  mEyes.push(mesh(new THREE.SphereGeometry(0.017, 8, 6), new THREE.MeshBasicMaterial({ color: '#16110f' }), s * 0.073, 0.185, 0.19, head, false));
+  mEyes.at(-1).scale.set(0.6, 0.85, 0.5);
+  brows.push(mesh(box(0.06, 0.012, 0.01), M('#2a1a18'), s * 0.075, 0.265, 0.19, head, false));
+  const blush = mesh(new THREE.CircleGeometry(0.028, 10), new THREE.MeshBasicMaterial({ color: '#f08a8a', transparent: true, opacity: 0.35 }), s * 0.12, 0.125, 0.183, head, false);
+  blush.rotation.y = s * 0.45;
+}
+mesh(box(0.035, 0.006, 0.006), black, 0, 0.19, 0.205, head, false);   // bridge
+const mouth = mesh(new THREE.SphereGeometry(0.018, 8, 6), new THREE.MeshBasicMaterial({ color: '#5a2620' }), 0, 0.09, 0.183, head, false);
+
+// ---------------------------------------------------------------- SCRIPT (voiced: lines.json from voices.py)
+const EP = await (await fetch('lines.json')).json();
+const LINES = EP.lines;
+const DURATION = EP.duration;
+const lineAt = t => { let L = LINES[0]; for (const l of LINES) if (t >= l.t - 0.25) L = l; return L; };
+const envAt = (t, who) => { for (const l of LINES) if (l.who === who && t >= l.t && t < l.t + l.d) { const i = Math.floor((t - l.t) * 30); return l.env[i] ?? 0; } return 0; };
+// smooth the envelope a touch so mouths don't flicker
+const envS = (t, who) => (envAt(t - 1 / 30, who) + 2 * envAt(t, who) + envAt(t + 1 / 30, who)) / 4;
+
+// ---------------------------------------------------------------- shots
+const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const MAYA_HEAD = () => { const p = new THREE.Vector3(); head.getWorldPosition(p); p.y += 0.17; return p; };
+function shotCam(name, u) {
+  const push = ease(u);
+  switch (name) {
+    case 'wide': return { pos: v3(-0.3 + push * 0.05, 1.42, 2.35 - push * 0.15), look: v3(0.18, 1.12, -0.45), fov: 42, focus: 'maya', ap: 0.6 };
+    case 'claude': return { pos: v3(CL.x - 0.3, CL.y + 0.3, CL.z + 1.15 - push * 0.1), look: v3(CL.x + 0.06, CL.y + 0.2, CL.z), fov: 40, focus: 'claude', ap: 2.2 };
+    case 'maya': { const h = MAYA_HEAD(), a = MAYA.rot - 0.12, d = 1.75 - push * 0.12;
+      return { pos: v3(h.x + Math.sin(a) * d, h.y - 0.02, h.z + Math.cos(a) * d), look: v3(h.x, h.y - 0.2, h.z), fov: 40, focus: 'maya', ap: 2.0 }; }
+    case 'debug': return { pos: v3(0.3, 1.3, 1.6), look: v3(0.3, 1.0, -0.6), fov: 40, focus: 'maya', ap: 0.1 };
+  }
+}
+
+// ---------------------------------------------------------------- acting
+const lerp = (a, b, k) => a + (b - a) * k;
+const wob = (t, f, s = 0) => Math.sin(t * f + s);
+// arm poses as directions in torso space: [upper arm dir, forearm dir]; s = -1 viewer-left, +1 viewer-right
+const D = (x, y, z) => new THREE.Vector3(x, y, z).normalize();
+const POSES = {
+  crossed: s => [D(s * 0.1, -0.72, 0.68), D(-s * 0.9, s < 0 ? 0.07 : 0.0, 0.42)],
+  rest: s => [D(s * 0.1, -0.72, 0.68), D(-s * 0.2, 0, 1)],
+  gesture: s => s > 0 ? [D(0.35, -0.75, 0.5), D(0.1, 0.8, 0.6)] : [D(-0.1, -0.72, 0.68), D(0.9, 0.07, 0.42)],
+};
+const mayaPoseName = L => (L.who === 'M' && (L.act === 'gesture')) ? 'gesture' : 'crossed';
+function mayaPose(t) { // blend from previous line's pose into this one
+  const L = lineAt(t), i = LINES.indexOf(L), P = LINES[i - 1];
+  const k = ease(prog(t, L.t - 0.3, 0.45));
+  const to = POSES[mayaPoseName(L)], from = P ? POSES[mayaPoseName(P)] : to;
+  return s => to(s).map((v, j) => from(s)[j].clone().lerp(v, k).normalize());
+}
+const DOWN = new THREE.Vector3(0, -1, 0);
+function aimArm(a, upper, fore) {
+  a.sh.quaternion.setFromUnitVectors(DOWN, upper);
+  a.el.quaternion.setFromUnitVectors(DOWN, fore.clone().applyQuaternion(a.sh.quaternion.clone().invert()));
+}
+let claudeYaw = 0;
+function animate(t) {
+  const L = lineAt(t);
+  const since = t - L.t;
+
+  // ---- Claude
+  const cEnv = envS(t, 'C');
+  let bounce = Math.abs(Math.sin(t * 2.2)) * 0.006 + cEnv * 0.03;
+  if (L.who === 'C' && L.act === 'excited') bounce += Math.abs(Math.sin(since * 10)) * 0.07 * clamp(1 - since / 1.2);
+  if (L.who === 'C' && L.act === 'bounce') bounce += Math.abs(Math.sin(since * 8)) * 0.025 * clamp(1 - since / 0.6);
+  claude.position.set(CL.x, CL.y, CL.z);
+  claudeBody.position.y = bounce;
+  const sq = 1 + cEnv * 0.07 + Math.sin(t * 2.2) * 0.008;
+  claudeBody.scale.set(1 / Math.sqrt(sq), sq, 1 / Math.sqrt(sq));
+  let yaw = L.who === 'C' ? -0.2 : 0.75, roll = 0, eyeX = 0, eyeH = 1;
+  if (L.who === 'C' && L.act === 'look-away') { const k = ease(prog(since, 0, 0.35)) * (1 - ease(prog(since, L.d + 0.1, 0.4))); yaw = lerp(-0.2, -0.85, k); eyeX = -0.012 * k; }
+  if (L.who === 'C' && L.act === 'tilt') roll = 0.22 * ease(prog(since, 0, 0.4));
+  if (L.who === 'C' && L.act === 'squint') eyeH = lerp(1, 0.32, ease(prog(since, 0.1, 0.3)));
+  if (L.who === 'M' && L.act === 'lean') yaw = 0.95;
+  claudeYaw = yaw;
+  claude.rotation.y = yaw;
+  claudeBody.rotation.z = roll + wob(t, 1.3) * 0.02;
+  const bl = ((t + 0.4) % 3.3) < 0.11 ? 0.12 : 1;
+  cEyes.forEach((e, i) => { e.scale.y = eyeH * bl; e.position.x = (i ? 1 : -1) * 0.042 + eyeX; });
+  ticks.visible = L.who === 'C' && L.act === 'excited' && since < 1.6;
+  ticks.scale.setScalar(1 + Math.sin(t * 20) * 0.1);
+  pointer.visible = false;
+
+  // ---- Maya
+  const mEnv = envS(t, 'M');
+  const lean = (L.who === 'M' && L.act === 'lean') ? ease(prog(since, -0.2, 0.35)) * (1 - ease(prog(since, L.d + 0.2, 0.5))) : 0;
+  torso.rotation.x = 0.1 + lean * 0.2 + wob(t, 1.1) * 0.012;
+  torso.position.y = 0.55 + wob(t, 1.6) * 0.004;
+  // looks at Claude (low, front-left); while talking small emphatic nods follow her voice
+  head.rotation.y = -0.38 + wob(t, 0.6) * 0.04 + (L.who === 'C' ? -0.05 : 0);
+  head.rotation.x = 0.16 - lean * 0.1 + mEnv * 0.05 * Math.sin(t * 9);
+  head.rotation.z = (L.who === 'M' && L.act === 'gesture' ? 0.08 : 0) + (L.who === 'C' && L.act === 'tilt' ? -0.06 : 0) + wob(t, 0.8) * 0.02;
+  // mouth from the voice
+  const mo = 0.3 + mEnv * 2.4;
+  mouth.scale.set(0.9 + mEnv * 0.4, mo, 0.4);
+  // brows: up when she talks loud, down when listening to nonsense
+  const browY = 0.268 + mEnv * 0.018 - (L.who === 'C' && ['look-away', 'squint'].includes(L.act) ? 0.012 : 0);
+  brows.forEach((b, i) => { b.position.y = browY; b.rotation.z = (i ? -1 : 1) * 0.06; });
+  const mb = ((t + 1.3) % 4.1) < 0.13 ? 0.12 : 1;
+  mEyes.forEach(e => e.scale.y = 0.85 * mb);
+  // arms
+  const pose = mayaPose(t);
+  for (const [a, s] of [[armL, -1], [armR, 1]]) {
+    const [u, f] = pose(s);
+    if (s > 0 && L.who === 'M' && L.act === 'gesture') f.applyAxisAngle(new THREE.Vector3(1, 0, 0), mEnv * 0.3 * Math.sin(t * 6));
+    aimArm(a, u, f);
+  }
+}
+
+// ---------------------------------------------------------------- captions + finishing (2D)
+function roundRect(x, y, w, h, r) { octx.beginPath(); octx.moveTo(x + r, y); octx.arcTo(x + w, y, x + w, y + h, r); octx.arcTo(x + w, y + h, x, y + h, r); octx.arcTo(x, y + h, x, y, r); octx.arcTo(x, y, x + w, y, r); octx.closePath(); }
+function wrap(text, maxW) {
+  const words = text.split(' '), lines = []; let cur = '';
+  for (const w of words) { const test = cur ? cur + ' ' + w : w; if (octx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; } else cur = test; }
+  lines.push(cur); return lines;
+}
+function caption(t) {
+  const L = LINES.find(l => t >= l.t - 0.1 && t < l.t + l.d); if (!L) return;
+  const s = W / 1080, size = 44 * s;
+  octx.font = `700 ${size}px Inter`;
+  const lines = wrap(L.text, W * 0.66), lh = size * 1.25;
+  const tw = Math.max(...lines.map(l => octx.measureText(l).width));
+  const pw = tw + 56 * s, ph = lines.length * lh + 36 * s, x = (W - pw) / 2, y = H * 0.115;
+  const a = clamp((t - L.t + 0.1) / 0.18) * clamp((L.t + L.d - t) / 0.15);
+  const pop = 0.92 + 0.08 * ease(clamp((t - L.t + 0.1) / 0.2));
+  octx.save(); octx.globalAlpha = a; octx.translate(W / 2, y + ph / 2); octx.scale(pop, pop); octx.translate(-W / 2, -(y + ph / 2));
+  octx.fillStyle = 'rgba(14,18,32,0.72)'; roundRect(x, y, pw, ph, 22 * s); octx.fill();
+  octx.fillStyle = '#ffffff'; octx.textAlign = 'center'; octx.textBaseline = 'middle';
+  lines.forEach((l, i) => octx.fillText(l, W / 2, y + 18 * s + lh * (i + 0.5)));
+  octx.restore();
+}
+const grain = (() => { const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'), d = g.createImageData(256, 256), r = rng(99);
+  for (let i = 0; i < d.data.length; i += 4) { const v = r() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 14; } g.putImageData(d, 0, 0); return c; })();
+function finish(t) {
+  octx.drawImage(renderer.domElement, 0, 0);
+  // vignette
+  const g = octx.createRadialGradient(W / 2, H * 0.5, H * 0.3, W / 2, H * 0.5, H * 0.75);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(5,8,20,0.45)');
+  octx.fillStyle = g; octx.fillRect(0, 0, W, H);
+  // grain (shifts each frame)
+  const f = Math.floor(t * FPS);
+  octx.save(); octx.globalCompositeOperation = 'overlay'; octx.translate(-(f * 37) % 256, -(f * 91) % 256);
+  octx.fillStyle = octx.createPattern(grain, 'repeat'); octx.fillRect(0, 0, W + 256, H + 256); octx.restore();
+  caption(t);
+  // handle watermark
+  octx.font = `600 ${22 * W / 1080}px Inter`; octx.fillStyle = 'rgba(255,255,255,0.35)'; octx.textAlign = 'center';
+  octx.fillText('AI Explainer Channel', W / 2, H * 0.62);
+  // fade in / out
+  const fade = clamp((DURATION - t) / 0.8);
+  if (fade < 1) { octx.fillStyle = `rgba(5,8,20,${1 - fade})`; octx.fillRect(0, 0, W, H); }
+}
+
+// ---------------------------------------------------------------- post: depth of field
+const rt = new THREE.WebGLRenderTarget(W, H, { samples: 4, type: THREE.HalfFloatType });
+const composer = new EffectComposer(renderer, rt);
+composer.addPass(new RenderPass(scene, camera));
+const bokeh = new BokehPass(scene, camera, { focus: 1, aperture: 0.005, maxblur: 0.012 });
+composer.addPass(bokeh);
+composer.addPass(new OutputPass());
+// ---------------------------------------------------------------- render entry point
+function renderAt(t) {
+  const L = lineAt(t);
+  const idx = LINES.indexOf(L);
+  const start = idx === 0 ? 0 : L.t - 0.25, end = LINES[idx + 1] ? LINES[idx + 1].t - 0.25 : DURATION;
+  animate(t);
+  drawBoard(40);
+  const s = shotCam(P.get('shot') || L.shot, clamp((t - start) / (end - start)));
+  // tiny handheld drift
+  s.pos.x += wob(t, 0.9) * 0.006; s.pos.y += wob(t, 1.3, 1) * 0.005;
+  camera.position.copy(s.pos); camera.fov = s.fov; camera.updateProjectionMatrix(); camera.lookAt(s.look);
+  const fp = s.focus === 'claude' ? v3(CL.x, CL.y + 0.17, CL.z) : MAYA_HEAD();
+  bokeh.uniforms.focus.value = camera.position.distanceTo(fp);
+  bokeh.uniforms.aperture.value = s.ap * 0.0025;
+  bokeh.uniforms.maxblur.value = 0.012;
+  composer.render();
+  finish(t);
+}
+window.renderAt = renderAt;
+window.frameJPEG = (t, q = 0.92) => { renderAt(t); return out.toDataURL('image/jpeg', q); };
+window.exportGLB = async () => {
+  const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
+  renderAt(4.0);
+  const objs = scene.children.filter(o => o.isMesh || o.isGroup);
+  const ab = await new GLTFExporter().parseAsync(objs, { binary: true, onlyVisible: true });
+  let s = ''; const u = new Uint8Array(ab); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+window.DURATION = DURATION; window.FPS = FPS; window.LINES = LINES;
+await document.fonts.load('700 40px Inter'); await document.fonts.load('800 40px Inter'); await document.fonts.load('600 40px Inter');
+renderAt(+(P.get('t') || 1));
+window.READY = true;
+</script>
+</body>
+</html>
