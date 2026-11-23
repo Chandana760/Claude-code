@@ -1,0 +1,31 @@
+{
+  "name": "claude-code",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render HelloReel out/hello.mp4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Chandana760/Claude-code.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Chandana760/Claude-code/issues"
+  },
+  "homepage": "https://github.com/Chandana760/Claude-code#readme",
+  "dependencies": {
+    "@remotion/cli": "4.0.545",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "remotion": "4.0.545"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}
