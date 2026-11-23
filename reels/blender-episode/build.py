@@ -216,16 +216,17 @@ def area(name, color, energy, loc, target, size=1.0):
     d = Vector(target) - Vector(loc); o.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
     return o
 SUN = SET == 'daily'
-if SUN: world.node_tree.nodes['Background'].inputs['Color'].default_value = srgb('#3a2350')
+NIGHT = arg('--sky', 'sunset' if SUN else 'night') == 'night'   # the daily desk can also be a night scene
+if SUN: world.node_tree.nodes['Background'].inputs['Color'].default_value = srgb('#141b33' if NIGHT else '#3a2350')
 if SUN:
     world.node_tree.nodes['Background'].inputs['Strength'].default_value = 0.08
-    area('key', '#ffe6d2', 45, (-0.5, -1.3, 1.6), (0.0, 0.72, 1.15), 1.2)       # soft, near-neutral front key
+    area('key', '#ffd8b0' if NIGHT else '#ffe6d2', 45, (-0.5, -1.3, 1.6), (0.0, 0.72, 1.15), 1.2)       # soft front key
     area('claudeKey', '#ffe6d2', 10, (-0.5, -0.8, 1.1), (-0.22, -0.1, 0.84), 0.6)
-    area('fill', '#7f8cff', 4, (1.3, -0.9, 1.3), (0.0, 0.4, 1.0), 1.6)            # cool fill
-    area('rim', '#ff9a6a', 45, (-0.8, 1.6, 1.8), (0.0, 0.72, 1.25), 0.8)          # dusk window rims
-    area('rim2', '#c78bff', 35, (0.8, 1.6, 1.8), (0.0, 0.72, 1.2), 0.8)
+    area('fill', '#7f8cff', 2 if NIGHT else 4, (1.3, -0.9, 1.3), (0.0, 0.4, 1.0), 1.6)            # cool fill
+    area('rim', '#7b8cff' if NIGHT else '#ff9a6a', 22 if NIGHT else 45, (-0.8, 1.6, 1.8), (0.0, 0.72, 1.25), 0.8)          # window rims
+    area('rim2', '#9a7bff' if NIGHT else '#c78bff', 15 if NIGHT else 35, (0.8, 1.6, 1.8), (0.0, 0.72, 1.2), 0.8)
     area('monGlow', '#8fb4ff', 8, (-0.5, 0.2, 1.15), (0.0, 0.72, 1.2), 0.5)       # monitor spill
-    area('lampWarm', '#ffbe78', 40, (-0.5, 0.0, 1.85), (0.0, 0.3, 0.9), 0.4)        # hanging desk lamp
+    area('lampWarm', '#ffbe78', 110 if NIGHT else 40, (-0.55, 0.05, 1.45), (0.0, 0.1, 0.75), 0.35)        # desk lamp pool of warm light
 else:
     area('key', '#ffb070', 85, (0.8, -0.3, 1.45), (0.0, 0.72, 1.15), 0.5)          # warm desk-lamp key
     area('claudeKey', '#ffb070', 26, (0.3, -0.5, 1.05), (-0.22, -0.1, 0.84), 0.35)
@@ -282,9 +283,9 @@ def sunset_image(w=1024, h=640, seed=8):
     k = np.exp(-np.linspace(-2, 2, 9) ** 2); k /= k.sum()
     for ax in (0, 1): img = np.apply_along_axis(lambda v: np.convolve(v, k, mode='same'), ax, img)
     return np.dstack([np.clip(img, 0, 4), np.ones((h, w))])
-emit_plane('city', image('city', sunset_image() if SUN else city_image()), 11, 6.5, 1.25 if SUN else 1.4, loc=(0, 6.0, 2.2))
+emit_plane('city', image('city', sunset_image() if (SUN and not NIGHT) else city_image()), 11, 6.5, 1.25 if SUN else 1.4, loc=(0, 6.0, 2.2))
 # bookshelf (left) with warm books
-shelf = empty('shelf', loc=(-1.75, 1.75, 0)); shelf.rotation_euler = (0, 0, 0.3)
+shelf = empty('shelf', loc=(1.15, 1.55, 0) if SUN else (-1.75, 1.75, 0)); shelf.rotation_euler = (0, 0, -0.35 if SUN else 0.3)
 cube('shelf_body', (0.9, 0.35, 2.1), mat('#3d2a22', 0.7), shelf, (0, 0, 1.05))
 rnd = random.Random(5); bookcols = ['#c8553d', '#2f7f7a', '#e0b84a', '#6a4bb5', '#d98c5f', '#3f6fb5', '#e46a8a', '#9bb84a']
 for sh_i in range(4):
@@ -315,12 +316,12 @@ if not SUN:
   board_text('You ask  ->  API  ->  Answer', (0, -0.025, 1.42), 0.045, '#2f6fd6')
 
 # ------------------------------------------------------------------ desk + props (from the prop sheet)
-wood = mat('#4a3022' if SUN else '#8a5a3c', 0.55, name='desk_wood')
+wood = mat('#6e4530' if SUN else '#8a5a3c', 0.55, name='desk_wood')
 cube('desk', (2.0, 0.95, 0.05), wood, loc=(0.1, 0.12, DESK - 0.025), bevel=0.012)
 for x, y in ((-0.85, -0.3), (1.05, -0.3), (-0.85, 0.55), (1.05, 0.55)):
     cube('leg', (0.05, 0.05, DESK - 0.05), mat('#2b2018', 0.6), None, (x, y, (DESK - 0.05) / 2))
 # monitor with code (right back)
-mon = empty('monitor', loc=(-0.5, 0.3, DESK) if SUN else (0.72, 0.38, DESK)); mon.rotation_euler = (0, 0, 0.45 if SUN else 0.4)
+mon = empty('monitor', loc=(-0.4, 0.4, DESK) if SUN else (0.72, 0.38, DESK)); mon.rotation_euler = (0, 0, 0.3 if SUN else 0.4)
 dark = mat('#1b1d26', 0.4)
 cube('mon_base', (0.2, 0.14, 0.015), dark, mon, (0, 0, 0.008), bevel=0.004)
 cube('mon_neck', (0.04, 0.03, 0.22), dark, mon, (0, 0.02, 0.12))
@@ -385,7 +386,16 @@ else:         # daily set: keyboard, white mug, notepad + pen, sticky notes (lik
     torus('mug_handle', 0.028, 0.008, mat('#f4f1ec', 0.35), mug, (0.05, 0, 0.05), rot=(math.pi / 2, 0, 0))
     cube('notepad', (0.17, 0.22, 0.01), mat('#f3d27a', 0.6), None, (0.12, -0.24, DESK + 0.005), rot=(0, 0, 0.12))
     cyl('pen', 0.005, 0.15, mat('#222222', 0.5), None, (0.15, -0.23, DESK + 0.015), rot=(0, math.pi / 2, 0.9))
-    pp = empty('plant_pot', loc=(-0.8, 0.35, DESK))
+    pp = empty('plant_pot', loc=(0.5, 0.42, DESK))
+    # desk lamp on the left (the sheet's warm lamp)
+    dl = empty('desk_lamp', loc=(-0.6, 0.05, DESK)); dl.rotation_euler = (0, 0, -0.6)
+    lampm = mat('#23262e', 0.45, name='lamp_dark')
+    cyl('lamp_base', 0.07, 0.02, lampm, dl, (0, 0, 0.01))
+    cyl('lamp_arm', 0.009, 0.5, lampm, dl, (0, 0.03, 0.25), rot=(-0.15, 0, 0))
+    cyl('lamp_head', 0.085, 0.12, lampm, dl, (0, -0.07, 0.5), r2=0.035, rot=(-1.0, 0, 0))
+    uvsphere('lamp_bulb', 0.03, mat('#ffe2a8', 0.4, emit='#ffcf80', strength=30, name='bulb'), dl, (0, -0.1, 0.47))
+    Ll = bpy.data.lights.new('desk_lamp_light', 'POINT'); Ll.color = srgb('#ffc98a')[:3]; Ll.energy = 18; Ll.shadow_soft_size = 0.05
+    link(bpy.data.objects.new('desk_lamp_light', Ll), dl, (0, -0.12, 0.42))
     cyl('pot', 0.06, 0.1, mat('#efe9df', 0.6), pp, (0, 0, 0.05), r2=0.05)
     for k in range(9):
         a = k * 2.4
@@ -635,6 +645,55 @@ if os.path.exists(os.path.join(EPDIR, 'dialogue.wav')):
         scene.sequence_editor.sequences.new_sound('dialogue', os.path.join(EPDIR, 'dialogue.wav'), 1, 1)
     except RuntimeError as e:
         print('audio strip skipped:', e)
+
+if '--plates' in argv:
+    # Background plates for the Remotion reel: the set only (no 3D characters), per camera, as two layers:
+    #   <shot>_bg.png  everything        <shot>_fg.png  desk + desk props only (transparent), drawn in front of Maya
+    # plus plates.json: where Maya's face and Claude's feet land on screen, and pixels per metre there.
+    from bpy_extras.object_utils import world_to_camera_view
+    out = os.path.abspath(arg('--plates')); os.makedirs(out, exist_ok=True)
+    def under(o, root):
+        while o is not None:
+            if o == root: return True
+            o = o.parent
+        return False
+    for o in scene.objects:
+        if under(o, maya) or under(o, claude): o.hide_render = True
+    W, H = scene.render.resolution_x, scene.render.resolution_y
+    mface = Vector((0, MY, 0.52 + 0.385 + 0.15 * 1.12))          # Maya's face centre (seated)
+    cfeet = Vector((CL.x, CL.y, DESK))
+    SHOTS = {
+        'maya':   ((0.05, -0.95, 1.22), (0.0, MY, 1.17), 40, 1.75, 1.4),
+        'claude': ((CL.x - 0.12, CL.y - 0.78, DESK + 0.2), (CL.x - 0.02, CL.y, DESK + 0.1), 35, 0.8, 1.6),
+        'wide':   ((0.15, -1.95, 1.3), (0.0, 0.35, 0.98), 30, 2.4, 4.0),
+    }
+    info = {'width': W, 'height': H, 'shots': {}}
+    def proj(p):
+        v = world_to_camera_view(scene, cam, p); return [v.x * W, (1 - v.y) * H, v.z]
+    for name, (pos, tgt, lens, focus, fstop) in SHOTS.items():
+        cam.location = pos; cam.rotation_quaternion = look(pos, tgt)
+        cam_data.lens = lens; cam_data.dof.focus_distance = focus; cam_data.dof.aperture_fstop = fstop
+        bpy.context.view_layer.update()
+        d = {}
+        for key, p in (('maya_face', mface), ('claude_feet', cfeet)):
+            a = proj(p); b = proj(p + Vector((0.1, 0, 0)))
+            d[key] = {'x': a[0], 'y': a[1], 'depth': a[2], 'px_per_m': abs(b[0] - a[0]) * 10}
+        d['desk_y'] = proj(Vector((0, MY - 0.3, DESK)))[1]
+        info['shots'][name] = d
+        scene.render.image_settings.file_format = 'PNG'; scene.render.image_settings.color_mode = 'RGBA'; scene.render.film_transparent = False
+        scene.render.filepath = os.path.join(out, f'{name}_bg.png'); bpy.ops.render.render(write_still=True)
+        # foreground layer: only things standing between the camera and Maya (desk, props)
+        hidden = []
+        for o in scene.objects:
+            if o.type in ('LIGHT', 'CAMERA') or o.hide_render: continue
+            if o.matrix_world.translation.y > MY - 0.15 or o.name.startswith(('city', 'wall', 'floor', 'mullion', 'transom', 'sill')):
+                o.hide_render = True; hidden.append(o)
+        scene.render.film_transparent = True
+        scene.render.filepath = os.path.join(out, f'{name}_fg.png'); bpy.ops.render.render(write_still=True)
+        for o in hidden: o.hide_render = False
+        print('plate', name, flush=True)
+    json.dump(info, open(os.path.join(out, 'plates.json'), 'w'), indent=1)
+    sys.exit(0)
 
 if '--stills' in argv:
     out = arg('--out', 'stills'); os.makedirs(out, exist_ok=True)
