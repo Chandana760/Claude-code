@@ -42,18 +42,20 @@ def tts(i, who, text):
     return np.frombuffer(raw, np.float32)
 
 t = 0.4; clips = []; lines = []
-for i, (who, text, shot, act, pause) in enumerate(SCRIPT):
+for i, (who, text, shot, act, pause, *cut) in enumerate(SCRIPT):
     a = tts(i, who, text)
     nz = np.where(np.abs(a) > 0.012)[0]
     a = a[max(0, nz[0] - 800): nz[-1] + 2000]
     a = a * (0.11 / max(1e-6, float(np.sqrt(np.mean(a[np.abs(a) > 0.02] ** 2)))))   # every line at the same loudness
+    if cut:                                   # interrupted line: cut it off with a 30 ms fade
+        n = int(cut[0] * SR); a = a[:n].copy(); f = int(0.03 * SR); a[-f:] *= np.linspace(1, 0, f)
     t += pause; d = len(a) / SR
     hop = SR // FPS
     env = np.array([np.sqrt(np.mean(a[k:k + hop] ** 2)) for k in range(0, len(a), hop)])
     env = np.clip(env / (env.max() or 1) * 1.25, 0, 1)
     lines.append({'t': round(t, 3), 'd': round(d, 3), 'who': who, 'text': CAPTION(text), 'shot': shot, 'act': act, 'env': [round(float(e), 3) for e in env]})
     clips.append((t, a)); t += d
-total = round(t + 1.6, 2)
+total = round(t + 0.9, 2)
 mix = np.zeros(int(total * SR) + SR, np.float32)
 for st, a in clips: k = int(st * SR); mix[k:k + len(a)] += a
 mix = np.tanh(mix * 1.6) / 1.6   # soft-clip the odd loud peak instead of turning the whole track down
