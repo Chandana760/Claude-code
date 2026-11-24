@@ -1,0 +1,187 @@
+{
+  "title": "I Cannot Forgive You",
+  "brand": "Clay Sight",
+  "aspect_ratio": "16:9",
+  "length_s": 50,
+  "style": "Handmade plasticine claymation photographed on a real stop-motion miniature set. Matte clay surfaces with visible fingerprints and sculpting tool marks. Chunky simplified characters with round bead eyes and thick clay eyebrows. Soft diffused studio lighting, muted earthy palette, shallow depth of field macro photography, tactile handcrafted props and set dressing. No glossy CG, no plastic shine, no text.",
+  "motion_style": "Stop-motion animation at 12 fps feel, slight frame-to-frame stutter, small deliberate gestures, subtle slow camera move only, clay texture stays visible, no morphing, no smooth CG motion.",
+  "title_card": {
+    "text": "I CANNOT FORGIVE YOU",
+    "at": "0:00-0:03",
+    "look": "chunky hand-rolled clay letters, Clay Sight orange on cream"
+  },
+  "characters": {
+    "buddha": "calm monk, shaved-curl clay hair in a top knot, long earlobes, saffron robe, half-closed eyes",
+    "merchant": "see refs/merchant-turnaround.jpg: maroon turban with gold brooch, thick black moustache, royal-blue kurta with gold trim, gold sash, olive trousers, sandals",
+    "hero": "see refs/hero-turnaround (pending upload): messy brown clay hair, short beard, tired eyes, maroon zip hoodie over grey tee, khaki trousers, brown shoes",
+    "boy": "little boy, black messy hair, yellow tee, navy shorts, red sneakers (from user's final art)",
+    "girl": "girl with long dark wavy hair, denim jacket over white tee, jeans (from user's final art)"
+  },
+  "shots": [
+    {
+      "n": 1,
+      "t": "0:00-0:03",
+      "ref": "refs/storyboard/shot01_0000-0003.png",
+      "env": 2,
+      "vo": "Spit lands on the Buddha's cheek and slowly runs down his face.",
+      "frame": "Extreme close-up of the Buddha's calm face, a drop of spit on his cheek, ashram trees behind.",
+      "motion": "The drop slowly slides down his cheek; he does not flinch; very slow push-in.",
+      "final_art": "final/shot01-buddha-spit.jpg",
+      "note": "User art already in target style; split into 3 cuts of ~1s each, animate the drip."
+    },
+    {
+      "n": 2,
+      "t": "0:03-0:06",
+      "ref": "refs/storyboard/shot02_0003-0006.png",
+      "env": 2,
+      "vo": "The man who spat is a wealthy merchant, shaking with anger.",
+      "frame": "Merchant mid-shot, red-faced, fists clenched, monks blurred behind in the courtyard.",
+      "motion": "He trembles with anger, fists shaking, moustache twitching; monks stay still."
+    },
+    {
+      "n": 3,
+      "t": "0:06-0:10",
+      "ref": "refs/storyboard/shot03_0006-0010.png",
+      "env": 1,
+      "vo": "The Buddha wipes it away and quietly asks, \"Anything else?\"",
+      "frame": "Buddha close-up under the bodhi tree, mouth slightly open, speaking softly.",
+      "motion": "He raises a hand and wipes his cheek, then speaks two words calmly; tiny head tilt."
+    },
+    {
+      "n": 4,
+      "t": "0:10-0:12",
+      "ref": "refs/storyboard/shot04_0010-0012.png",
+      "env": 2,
+      "vo": "The merchant has no answer.",
+      "frame": "Over-the-shoulder from behind the merchant's turban to the Buddha's gentle face.",
+      "motion": "Buddha holds a steady gaze; merchant's shoulders stiffen; hold."
+    },
+    {
+      "n": 5,
+      "t": "0:12-0:15",
+      "ref": "refs/storyboard/shot05_0012-0015.png",
+      "env": 3,
+      "vo": "He storms off.",
+      "frame": "Low shot of the merchant's sandals and kurta hem stomping on a dusty village path.",
+      "motion": "Feet stomp away from camera, clay dust puffs kick up."
+    },
+    {
+      "n": 6,
+      "t": "0:15-0:18",
+      "ref": "refs/storyboard/shot06_0013-0018.png",
+      "env": 4,
+      "vo": "That night, he can't sleep.",
+      "frame": "Merchant lying wide-eyed in an ornate palace bed, single oil lamp, lattice window.",
+      "motion": "Lamp flame flickers; he stares at the ceiling, turns his head, blinks."
+    },
+    {
+      "n": 7,
+      "t": "0:18-0:21",
+      "ref": "refs/storyboard/shot07_0018-0021.png",
+      "env": 5,
+      "vo": "(pause)",
+      "frame": "Merchant in bed, a translucent blue glowing vision of the Buddha beside him.",
+      "motion": "The blue vision fades in softly; merchant's eyes widen in shame."
+    },
+    {
+      "n": 8,
+      "t": "0:21-0:24",
+      "ref": "refs/storyboard/shot08_0021-0024.png",
+      "env": 6,
+      "vo": "By morning, consumed by shame, he falls at the Buddha's feet and begs for forgiveness.",
+      "frame": "Morning light; merchant kneeling, palms joined, before the seated Buddha under the tree.",
+      "motion": "Merchant drops to his knees and bows, hands pressed together; sun rays shift."
+    },
+    {
+      "n": 9,
+      "t": "0:24-0:27",
+      "ref": "refs/storyboard/shot09_0024-0027.png",
+      "env": 8,
+      "vo": "\"I cannot forgive you,\" the Buddha says. The merchant goes pale.",
+      "frame": "Merchant close-up, wide teary eyes, moustache drooping.",
+      "motion": "His face drains, eyes widen, a tear forms; slow push-in."
+    },
+    {
+      "n": 10,
+      "t": "0:27-0:30",
+      "ref": "refs/storyboard/shot10_0027-0030.png",
+      "env": 7,
+      "vo": "\"The man you spat on is gone. So is the man who spat. How could I hold yesterday against you?\"",
+      "frame": "Buddha gently placing a hand on the merchant's shoulder, warm smile.",
+      "motion": "Buddha's hand rests on his shoulder; merchant's shoulders relax; leaves drift."
+    },
+    {
+      "n": 11,
+      "t": "0:30-0:33",
+      "ref": "refs/storyboard/shot11_0030-0033.png",
+      "env": 10,
+      "vo": "We lock people inside their worst moment.",
+      "frame": "Modern man in maroon hoodie, arms crossed, eyeing people at a backyard party with string lights.",
+      "motion": "He keeps arms crossed and narrows his eyes; background people move slightly."
+    },
+    {
+      "n": 12,
+      "t": "0:33-0:36",
+      "ref": "refs/storyboard/shot12_0033-0036.png",
+      "env": 11,
+      "vo": "The brother who broke your bike.",
+      "frame": "Little boy in a yellow tee holding a red bike on a suburban sidewalk, guilty grin.",
+      "motion": "Boy glances at the bent wheel, scratches his head, grins guiltily.",
+      "final_art": "final/shot12-boy-bike.jpg"
+    },
+    {
+      "n": 13,
+      "t": "0:36-0:40",
+      "ref": "refs/storyboard/shot13_0036-0040.png",
+      "env": 12,
+      "vo": "The friend who forgot your birthday.",
+      "frame": "Girl sitting on her bed, blowing out a single candle on a cupcake alone.",
+      "motion": "She blows the candle out; a thin wisp of smoke rises; she looks down.",
+      "final_art": "final/shot13-girl-cupcake.jpg"
+    },
+    {
+      "n": 14,
+      "t": "0:40-0:43",
+      "ref": "refs/storyboard/shot14_0040-0043.png",
+      "env": 13,
+      "vo": "And ourselves, still replaying a mistake from nineteen.",
+      "frame": "Modern man awake in bed at night, blue blanket, staring at the ceiling.",
+      "motion": "He blinks slowly, rubs his eyes, cool moonlight flickers.",
+      "alt_ref": "refs/hero-replaying-mistake.jpg"
+    },
+    {
+      "n": 15,
+      "t": "0:43-0:45",
+      "ref": "refs/storyboard/shot15_0043-0045.png",
+      "env": 14,
+      "vo": "That person isn't there anymore. Neither are you.",
+      "frame": "The same friends and family laughing together around a picnic table with burgers.",
+      "motion": "Everyone laughs and leans in; string lights twinkle."
+    },
+    {
+      "n": 16,
+      "t": "0:45-0:48",
+      "ref": "refs/storyboard/shot16_0045-0048.png",
+      "env": 6,
+      "vo": "So stop wiping your face.",
+      "frame": "Modern man under the tree, eyes closed, hand on chest, peaceful smile.",
+      "motion": "He breathes out slowly and smiles; leaves sway; slow pull-back."
+    },
+    {
+      "n": 17,
+      "t": "0:48-0:50",
+      "ref": "refs/end-card-clay-sight.jpg",
+      "env": 15,
+      "vo": "Follow, or you might miss the next lesson.",
+      "frame": "Clay Sight end card (keep as is).",
+      "motion": "Finger presses the red button; character's eyes roll; tiny bounce.",
+      "restyle": false
+    }
+  ],
+  "pending_uploads": [
+    "final/shot01-buddha-spit.jpg — 3-panel Buddha spit art (wide, close-up, macro drip): cut into 3 quick shots for 0:00-0:03",
+    "final/shot12-boy-bike.jpg — boy with red bike on suburban sidewalk",
+    "final/shot13-girl-cupcake.jpg — girl blowing out cupcake candle (centre panel is the usable frame)",
+    "refs/hero-turnaround.jpg — modern man front/side/back"
+  ]
+}
