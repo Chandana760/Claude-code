@@ -30,6 +30,7 @@ from mathutils import Euler, Matrix, Vector
 # ----------------------------- variant switches ----------------------------- #
 HAIR = "bob"            # "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
 GLASSES = "big"         # "big" = large thin black round (reference) | "round" = thin round | "rect" = chunky rectangular
+STYLE = "chibi"         # "chibi" = big smooth head on a small low-poly body (reference mix) | "lowpoly" = all faceted
 FACE = "dots"            # "dots" = small black dot eyes with a glint (reference) | "ovals" = white eyes, lids, lashes, brows
 OUTFIT = "yellow"       # "yellow" = puffy yellow jacket + dark tee (reference) | "hoodie" = cobalt hoodie | "jacket" = olive jacket | "sweater" = burnt orange
 MASCOT_SHAPE = "claude"  # "claude" = orange lobed Claude blob | "robot" = round robot cube | "fox" = crystal fox | "cactus" = geometric cactus
@@ -291,7 +292,7 @@ def build_human(C):
     # Neck + big rounded head
     neck_m = mat("M_Char_TeeNeck", (0.025, 0.025, 0.03)) if OUTFIT == "yellow" else skin
     obj("Human_Neck", [cyl((0, 0, 1.13), 0.05, 0.05, 0.07, seg=6)], neck_m, C, root)
-    obj("Human_HeadMesh", [ico((0, 0, HZ), 0.20, sub=2, scale=(1.0, 0.92, 0.95)),
+    head_mesh = obj("Human_HeadMesh", [ico((0, 0, HZ), 0.20, sub=3 if STYLE == "chibi" else 2, scale=(1.0, 0.92, 0.95)),
                            ico((0.198, 0.0, HZ - 0.01), 0.03, sub=1, scale=(0.5, 1, 1)),   # ears
                            ico((-0.198, 0.0, HZ - 0.01), 0.03, sub=1, scale=(0.5, 1, 1)),
                            ico((0, -0.181, HZ - 0.035), 0.016 if FACE != "dots" else 0.011, sub=1)],  # nose
@@ -509,9 +510,17 @@ def build_human(C):
                       ico((-0.05, -0.165, HZ + 0.13), 0.06, sub=1, scale=(1.8, 0.55, 0.6), rot=(0, 12, 0))]
         obj("Human_HairTie", [torus((0, 0.05, HZ + 0.185), 0.06, 0.012, rot=(0, 0, 0), seg=10)],
             mat("M_Char_HairTie", (0.95, 0.45, 0.55)), C, **hp)
-    obj("Human_Hair", hair_parts, hair, C, **hp)
+    hair_ob = obj("Human_Hair", hair_parts, hair, C, **hp)
 
     focus = empty("Human_FocusTarget", C, head, loc=(0, -0.18, 0), size=0.03)
+    if STYLE == "chibi":
+        # Chibi mix: oversized, smooth-shaded head and hair on the faceted body;
+        # the head sits low on the collar so the neck disappears.
+        head.scale = (1.22, 1.22, 1.22)
+        head.location.z = HZ + 0.015
+        for o in (head_mesh, hair_ob):
+            for poly in o.data.polygons:
+                poly.use_smooth = True
     if FACE == "dots":     # reference face: no eye whites, lids, lashes, blush or brows
         for name in ("Human_EyeWhites", "Human_Eyelids", "Human_Lashes", "Human_Blush", "Human_Eyebrows"):
             o = bpy.data.objects.get(name)
