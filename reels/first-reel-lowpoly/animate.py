@@ -268,6 +268,7 @@ def animate():
     lids = bpy.data.objects["Human_Eyelids"].data.shape_keys.key_blocks
     root = bpy.data.objects["Mascot_Root"]
     root_rz = root.rotation_euler.z
+    root_loc = root.location.copy()
     eyes = bpy.data.objects["Mascot_Eyes"]
 
     # Dot-eye face: blinks squash the dots into lines (pupils scaled about their centre)
@@ -400,8 +401,20 @@ def animate():
         def bump(x, a, b):                           # 0 -> 1 -> 0 between a and b
             return math.sin(math.pi * clamp((x - a) / (b - a))) if a <= x <= b else 0.0
 
+        jx = jy = jr = 0.0
         if cl_line:
             squash += -0.10 * ce                     # tiny upright pulse on syllables
+            # Reference: a slight vibration while talking (tiny frame-to-frame jitter)
+            rr = random.Random(f * 7919)
+            amp = 0.35 + ce
+            jx = (rr.random() - 0.5) * 0.006 * amp
+            jy = (rr.random() - 0.5) * 0.003 * amp
+            jr = (rr.random() - 0.5) * math.radians(3.0) * amp
+            # ...and a quick little hop as each line starts
+            if cact not in ("bounce", "excited"):
+                s0 = t - cl_line["t"]
+                hop = max(hop, 0.18 * bump(s0, 0.04, 0.34))
+                squash += 0.16 * bump(s0, 0.0, 0.06) + 0.18 * bump(s0, 0.34, 0.46)
         if cact in ("bounce", "excited") and last_c:
             hops = (0.0,) if cact == "bounce" else (0.0, 0.62)
             amp = 0.32 if cact == "bounce" else 0.45
@@ -421,13 +434,16 @@ def animate():
         if cact == "tilt" and last_c:                # brief curious head-tilt, then upright
             w = ease(csince / 0.3) * (1 - ease((csince - 0.9) / 0.4))
             tilt = 0.22 * w
-        eye_z *= 1 - 0.9 * blink_amount(t, mascot_blinks, 0.14)
+        eye_z *= 1 - 0.18 * ce                        # eyes flex with the voice
+        eye_z *= 1 - 0.72 * blink_amount(t, mascot_blinks, 0.16)   # blink: eyes squash to small squares
 
         root["hop"], root["tilt"], root["squash"] = clamp(hop), clamp(tilt, -1, 1), clamp(squash, -1, 1)
         for p in ("hop", "tilt", "squash"):
             root.keyframe_insert(f'["{p}"]', frame=f)
-        root.rotation_euler.z = rz
+        root.rotation_euler.z = rz + jr
         root.keyframe_insert("rotation_euler", index=2, frame=f)
+        root.location = root_loc + Vector((jx, jy, 0.0))
+        root.keyframe_insert("location", frame=f)
         eyes.scale = (1.0, 1.0, eye_z)
         eyes.keyframe_insert("scale", index=2, frame=f)
 
