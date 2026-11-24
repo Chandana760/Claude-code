@@ -28,7 +28,7 @@ import bpy
 from mathutils import Euler, Matrix, Vector
 
 # ----------------------------- variant switches ----------------------------- #
-HAIR = "bob"            # "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
+HAIR = "strands"        # "strands" = long locks from a side part (reference) | "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
 GLASSES = "none"        # "none" = no glasses | "big" = large thin black round (reference) | "round" = thin round | "rect" = chunky rectangular
 STYLE = "chibi"         # "chibi" = big smooth head on a small low-poly body (reference mix) | "lowpoly" = all faceted
 FACE = "dots"            # "dots" = small black dot eyes with a glint (reference) | "ovals" = white eyes, lids, lashes, brows
@@ -128,6 +128,60 @@ def cyl_between(p1, p2, r, seg=8):
     return lambda bm: bmesh.ops.create_cone(
         bm, cap_ends=True, cap_tris=False, segments=seg,
         radius1=r, radius2=r, depth=d.length, matrix=mtx)
+
+
+def cone_between(p1, p2, r1, r2, seg=7):
+    """Tapered segment from p1 (radius r1) to p2 (radius r2)."""
+    p1, p2 = Vector(p1), Vector(p2)
+    d = p2 - p1
+    mtx = Matrix.LocRotScale((p1 + p2) / 2, d.to_track_quat("Z", "Y"), None)
+    return lambda bm: bmesh.ops.create_cone(
+        bm, cap_ends=True, cap_tris=False, segments=seg,
+        radius1=r1, radius2=r2, depth=d.length, matrix=mtx)
+
+
+def puff_chain(p1, p2, r, spacing=0.8, squash=(1.0, 1.0, 1.0)):
+    """Puffy quilted sleeve: overlapping soft bulges from p1 to p2."""
+    p1, p2 = Vector(p1), Vector(p2)
+    n = max(2, int((p2 - p1).length / (r * spacing)) + 1)
+    return [ico(tuple(p1.lerp(p2, i / (n - 1))), r * (0.92 + 0.08 * ((i % 2) == 0)), sub=2, scale=squash)
+            for i in range(n)]
+
+
+def hair_lock(points, r0, r1, seg=8, normal_from=None, flat=(1.8, 0.5)):
+    """A lock of hair swept as ONE continuous tube along `points`: flat
+    elliptical cross-section (wide across the head, thin outward) tapering from
+    r0 to a near-point tip, so locks lie on the head like smooth strands."""
+    pts = [Vector(p) for p in points]
+    n = len(pts)
+    centre = Vector(normal_from) if normal_from is not None else None
+
+    def build(bm):
+        rings = []
+        for i, p in enumerate(pts):
+            tan = (pts[min(i + 1, n - 1)] - pts[max(i - 1, 0)]).normalized()
+            radial = (p - centre) if centre is not None else Vector((0, -1, 0))
+            x = tan.cross(radial)
+            if x.length < 1e-6:
+                x = tan.orthogonal()
+            x.normalize()
+            y = tan.cross(x).normalized()
+            t = i / (n - 1)
+            r = r0 + (r1 - r0) * t
+            if i == n - 1:
+                r *= 0.35                                    # soft tapered tip
+            ring = []
+            for k in range(seg):
+                a = 2 * math.pi * k / seg
+                ring.append(bm.verts.new(p + x * (math.cos(a) * r * flat[0]) + y * (math.sin(a) * r * flat[1])))
+            rings.append(ring)
+        for i in range(n - 1):
+            for k in range(seg):
+                k2 = (k + 1) % seg
+                bm.faces.new((rings[i][k], rings[i][k2], rings[i + 1][k2], rings[i + 1][k]))
+        bm.faces.new(list(reversed(rings[0])))
+        bm.faces.new(rings[-1])
+    return [build]
 
 
 def torus(loc, major, minor, rot=(90, 0, 0), seg=16, mseg=4):
@@ -252,15 +306,26 @@ def build_human(C):
         mat("M_Char_Chair", (0.15, 0.10, 0.18)), C, root)
 
     # Bust + folded arms resting on the desk (desk top z = 0.75)
-    body = [cyl((0, 0, 0.92), 0.20, 0.15, 0.40, seg=8, scale=(1.2, 0.85, 1.0)),
-            ico((0.20, -0.01, 1.06), 0.075, sub=1),             # shoulders
-            ico((-0.20, -0.01, 1.06), 0.075, sub=1),
-            cyl_between((0.21, -0.02, 1.04), (0.25, -0.20, 0.82), 0.055),   # upper arms
-            cyl_between((-0.21, -0.02, 1.04), (-0.25, -0.20, 0.82), 0.055),
-            ico((0.25, -0.20, 0.81), 0.058, sub=1),             # elbows on the desk
-            ico((-0.25, -0.20, 0.81), 0.058, sub=1),
-            cyl_between((-0.25, -0.21, 0.80), (0.15, -0.29, 0.81), 0.055),  # lower forearm
-            cyl_between((0.25, -0.23, 0.85), (-0.15, -0.33, 0.855), 0.055)]  # upper forearm
+    puffy = OUTFIT in ("yellow", "lavender")
+    if puffy:
+        # Soft puffy jacket (reference): rounded torso, quilted sleeves, arms
+        # crossed on the desk
+        body = [ico((0, 0.01, 0.95), 0.20, sub=2, scale=(1.22, 0.86, 1.15)),
+                ico((0.20, 0.0, 1.06), 0.10, sub=2), ico((-0.20, 0.0, 1.06), 0.10, sub=2)]
+        body += puff_chain((0.23, -0.02, 1.03), (0.27, -0.20, 0.84), 0.078)     # upper arms
+        body += puff_chain((-0.23, -0.02, 1.03), (-0.27, -0.20, 0.84), 0.078)
+        body += puff_chain((-0.27, -0.21, 0.83), (0.12, -0.29, 0.84), 0.072, squash=(1.0, 1.0, 0.9))  # lower forearm
+        body += puff_chain((0.27, -0.23, 0.87), (-0.12, -0.33, 0.885), 0.072, squash=(1.0, 1.0, 0.9))  # upper forearm
+    else:
+        body = [cyl((0, 0, 0.92), 0.20, 0.15, 0.40, seg=8, scale=(1.2, 0.85, 1.0)),
+                ico((0.20, -0.01, 1.06), 0.075, sub=1),             # shoulders
+                ico((-0.20, -0.01, 1.06), 0.075, sub=1),
+                cyl_between((0.21, -0.02, 1.04), (0.25, -0.20, 0.82), 0.055),   # upper arms
+                cyl_between((-0.21, -0.02, 1.04), (-0.25, -0.20, 0.82), 0.055),
+                ico((0.25, -0.20, 0.81), 0.058, sub=1),             # elbows on the desk
+                ico((-0.25, -0.20, 0.81), 0.058, sub=1),
+                cyl_between((-0.25, -0.21, 0.80), (0.15, -0.29, 0.81), 0.055),  # lower forearm
+                cyl_between((0.25, -0.23, 0.85), (-0.15, -0.33, 0.855), 0.055)]  # upper forearm
     obj("Human_Body", body, cloth, C, root)
     obj("Human_Hands", [ico((0.17, -0.30, 0.83), 0.038, sub=1, scale=(0.9, 1.0, 0.8)),
                         ico((-0.17, -0.335, 0.87), 0.038, sub=1, scale=(0.9, 1.0, 0.8))],
@@ -274,14 +339,12 @@ def build_human(C):
         obj("Human_Outfit_Strings", [cyl_between((0.04, -0.15, 1.10), (0.05, -0.19, 0.98), 0.006, 5),
                                      cyl_between((-0.04, -0.15, 1.10), (-0.05, -0.19, 0.98), 0.006, 5)],
             mat("M_Char_Strings", (0.92, 0.92, 0.90)), C, root)
-    elif OUTFIT in ("yellow", "lavender"):   # jacket with lapels over a dark tee
-        obj("Human_Outfit_Collar", [box((0.075, -0.105, 1.10), (0.09, 0.035, 0.09), rot=(18, 0, -28)),
-                                    box((-0.075, -0.105, 1.10), (0.09, 0.035, 0.09), rot=(18, 0, 28)),
-                                    box((0.08, -0.155, 0.98), (0.05, 0.03, 0.22), rot=(0, -6, 0)),    # lapels
-                                    box((-0.08, -0.155, 0.98), (0.05, 0.03, 0.22), rot=(0, 6, 0)),
-                                    cyl((0, 0.03, 1.125), 0.115, 0.10, 0.05, seg=10)],
+    elif OUTFIT in ("yellow", "lavender"):   # puffy jacket: soft lapels over a dark tee
+        obj("Human_Outfit_Collar", [ico((0.075, -0.125, 1.08), 0.07, sub=2, scale=(0.75, 0.45, 1.25), rot=(10, -22, 0)),
+                                    ico((-0.075, -0.125, 1.08), 0.07, sub=2, scale=(0.75, 0.45, 1.25), rot=(10, 22, 0)),
+                                    ico((0, 0.04, 1.13), 0.13, sub=2, scale=(1.05, 0.65, 0.4))],
             cloth, C, root)
-        obj("Human_Outfit_Tee", [box((0, -0.15, 1.0), (0.12, 0.02, 0.24))],
+        obj("Human_Outfit_Tee", [ico((0, -0.12, 1.04), 0.08, sub=2, scale=(1.15, 0.45, 1.25))],
             mat("M_Char_Tee", (0.025, 0.025, 0.03)), C, root)
     elif OUTFIT == "jacket":
         obj("Human_Outfit_Collar", [box((0.065, -0.10, 1.11), (0.085, 0.025, 0.07), rot=(20, 0, -25)),
@@ -456,7 +519,43 @@ def build_human(C):
     def face_cut(co, bottom):
         return (co.y < -0.05 and co.z < HZ + 0.09) or co.z < bottom
 
-    if HAIR == "bob":
+    if HAIR == "strands":
+        # Reference hair: dark cap, then chunky locks from a side part that run
+        # over the head and hang behind to the shoulders; a swept fringe of locks
+        # across the forehead and two locks framing the face to chin level.
+        hc = Vector((0, 0.02, HZ + 0.01))
+        hr = 0.228
+
+        def on_head(d):
+            d = Vector(d).normalized()
+            return hc + Vector((d.x * hr * 1.04, d.y * hr * 0.98, d.z * hr))
+
+        def path(d0, d1, steps=8):
+            a0, a1 = Vector(d0).normalized(), Vector(d1).normalized()
+            return [on_head(a0.slerp(a1, i / steps)) for i in range(steps + 1)]
+
+        part = (-0.32, -0.12, 1.0)                           # side part, her right
+        hair_parts = [ico((0, 0.03, HZ + 0.03), 0.222, sub=2, scale=(1.06, 1.0, 0.94),
+                          cut=lambda co: co.y < -0.05 and co.z < HZ + 0.07)]
+        for i in range(20):                                  # over the head, then down the back
+            az = math.radians(-25 + i * (230 / 19))          # side -> back -> other side
+            end = (math.cos(az), math.sin(az), -0.15)
+            pts = path(part, end)
+            out = Vector((math.cos(az), math.sin(az), 0)) * 0.02
+            base = pts[-1]
+            pts += [base + out * (k / 3) + Vector((0, 0, -0.09 * k)) for k in (1, 2, 3)]
+            hair_parts += hair_lock(pts, 0.034, 0.016, normal_from=hc)
+        for az_deg, el in ((-118, 0.45), (-106, 0.40), (-94, 0.36), (-82, 0.38), (-70, 0.42), (-58, 0.47)):   # swept fringe
+            az = math.radians(az_deg)
+            hair_parts += hair_lock(path(part, (math.cos(az), math.sin(az), el), 8), 0.036, 0.014, normal_from=hc)
+        for az_deg in (-40, -140, -30, -150):               # face-framing locks: hug the head, then fall
+            az = math.radians(az_deg)
+            c, sn = math.cos(az), math.sin(az)
+            pts = path((c * 0.6, sn * 0.6, 0.8), (c, sn, -0.2), 6)
+            out = Vector((c, sn, 0)) * 0.012
+            pts += [pts[-1] + out * k + Vector((0, 0.004 * k, -0.06 * k)) for k in (1, 2, 3)]
+            hair_parts += hair_lock(pts, 0.032, 0.014, normal_from=hc, flat=(2.0, 0.45))
+    elif HAIR == "bob":
         # Shoulder-length bob ("lob"): top cap, then a ring of chunky faceted
         # strands hanging from the crown around the sides and back, two longer
         # face-framing locks, and a big side-swept fringe across the forehead.
