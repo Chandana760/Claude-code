@@ -28,7 +28,7 @@ import bpy
 from mathutils import Euler, Matrix, Vector
 
 # ----------------------------- variant switches ----------------------------- #
-HAIR = "curtain"        # "curtain" = centre part, two smooth curtains framing the face (reference) | "strands" = long locks from a side part (reference) | "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
+HAIR = "sleek"          # "sleek" = straight jaw-length locks + fringe (reference) | "curtain" = centre part, two smooth curtains framing the face (reference) | "strands" = long locks from a side part (reference) | "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
 GLASSES = "big"         # "none" = no glasses | "big" = large thin black round (reference) | "round" = thin round | "rect" = chunky rectangular
 STYLE = "chibi"         # "chibi" = big smooth head on a small low-poly body (reference mix) | "lowpoly" = all faceted
 FACE = "dots"            # "dots" = small black dot eyes with a glint (reference) | "ovals" = white eyes, lids, lashes, brows
@@ -288,8 +288,8 @@ def build_human(C):
         _sb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
     cloth = mat("M_Char_Outfit", OUTFITS[OUTFIT])
     cloth_dark = mat("M_Char_OutfitTrim", tuple(c * 0.7 for c in OUTFITS[OUTFIT]))
-    hair = mat("M_Char_Hair", (0.016, 0.009, 0.006))      # dark chocolate (reference)
-    _principled(hair).inputs["Roughness"].default_value = 0.85  # matte: no purple sheen from the window
+    hair = mat("M_Char_Hair", (0.008, 0.006, 0.006))      # near-black (reference)
+    _principled(hair).inputs["Roughness"].default_value = 0.65  # soft highlight, no plastic sheen
     ink = mat("M_Char_FaceInk", (0.03, 0.03, 0.04))
     white = mat("M_Char_EyeWhite", (0.95, 0.95, 0.93))
     frame_col = {"big": (0.008, 0.008, 0.01), "round": (0.06, 0.05, 0.07)}.get(GLASSES, (0.12, 0.06, 0.05))
@@ -527,7 +527,49 @@ def build_human(C):
     def face_cut(co, bottom):
         return (co.y < -0.05 and co.z < HZ + 0.09) or co.z < bottom
 
-    if HAIR == "curtain":
+    if HAIR == "sleek":
+        # Reference (front + profile): sleek, straight, thick flat locks that
+        # hug the head from the crown, then fall vertically to jaw/shoulder
+        # level; a fringe of locks falls over the forehead to just above the
+        # glasses; side locks hang in front of the ears.
+        hc = Vector((0, 0.015, HZ + 0.005))
+        hr = 0.232
+        bottom = HZ - 0.25                                   # jaw / top-of-shoulder length
+
+        def on_head(d, r=hr):
+            d = Vector(d).normalized()
+            return hc + Vector((d.x * r * 1.04, d.y * r * 0.97, d.z * r))
+
+        def path(d0, d1, steps=8, r=hr):
+            a0, a1 = Vector(d0).normalized(), Vector(d1).normalized()
+            return [on_head(a0.slerp(a1, i / steps), r) for i in range(steps + 1)]
+
+        def fall(pts, length_to, flare=0.012, steps=4):
+            """Continue a lock straight down to z = length_to with a tiny outward flare."""
+            p = pts[-1]
+            out = Vector((p.x - hc.x, p.y - hc.y, 0))
+            out = out.normalized() * flare if out.length > 1e-6 else Vector()
+            return pts + [p + out * (k / steps) + Vector((0, 0, (length_to - p.z) * k / steps)) for k in range(1, steps + 1)]
+
+        rnd_h = random.Random(33)
+        hair_parts = [ico((0, 0.02, HZ + 0.02), 0.222, sub=2, scale=(1.05, 1.0, 0.95),
+                          cut=lambda co: co.y < -0.05 and co.z < HZ + 0.06)]
+        part_x = -0.02
+        # sides + back: from the crown, over the head, then straight down
+        for i in range(20):
+            az = math.radians(-22 + i * (224 / 19))                     # cheek -> back -> other cheek (face stays clear)
+            root = (part_x + 0.03 * math.cos(az), 0.25 + 0.15 * math.sin(az), 1.0)
+            r_i = hr + (0.01 if i % 2 else 0.0)                          # neighbouring locks overlap: grooves
+            pts = path(root, (math.cos(az), math.sin(az), 0.05), 7, r_i)
+            pts = fall(pts, bottom + rnd_h.uniform(-0.025, 0.02))
+            hair_parts += hair_lock(pts, 0.05, 0.03, seg=6, normal_from=hc, flat=(2.2, 0.75), tip=0.25)
+        # fringe: from the front of the part, forward and down over the forehead
+        for az_deg, el in ((-52, 0.24), (-66, 0.32), (-79, 0.40), (-101, 0.40), (-114, 0.32), (-128, 0.24)):   # parted in the middle
+            az = math.radians(az_deg)
+            root = (part_x, -0.15, 1.0)
+            pts = path(root, (math.cos(az), math.sin(az), el), 8, hr + 0.006)
+            hair_parts += hair_lock(pts, 0.045, 0.02, seg=6, normal_from=hc, flat=(2.2, 0.7), tip=0.3)
+    elif HAIR == "curtain":
         # Reference hair: near-centre part; a few wide, smooth bands sweep from
         # the part down each side as two curtains over the forehead corners,
         # framing the face and falling past the shoulders. Middle of the
