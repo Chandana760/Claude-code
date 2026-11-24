@@ -32,6 +32,7 @@ HAIR = "sleek"          # "sleek" = straight jaw-length locks + fringe (referenc
 GLASSES = "big"         # "none" = no glasses | "big" = large thin black round (reference) | "round" = thin round | "rect" = chunky rectangular
 STYLE = "chibi"         # "chibi" = big smooth head on a small low-poly body (reference mix) | "lowpoly" = all faceted
 FACE = "dots"            # "dots" = small black dot eyes with a glint (reference) | "ovals" = white eyes, lids, lashes, brows
+NECKLINE = "open"       # "crew" = smooth top with a rolled neckline | "open" = open jacket over a dark tee strip (reference)
 OUTFIT = "lavender"     # "lavender" = lilac jacket + dark tee | "yellow" = yellow jacket + dark tee (reference) | "hoodie" = cobalt hoodie | "jacket" = olive jacket | "sweater" = burnt orange
 MASCOT_SHAPE = "claude"  # "claude" = orange lobed Claude blob | "robot" = round robot cube | "fox" = crystal fox | "cactus" = geometric cactus
 MASCOT_COLOR = "orange"  # "orange" (Claude) | "mint" | "coral" | "yellow"
@@ -311,7 +312,13 @@ def build_human(C):
     if puffy:
         # Soft puffy jacket (reference): rounded torso, quilted sleeves, arms
         # crossed on the desk
-        body = [ico((0, 0.01, 0.95), 0.20, sub=2, scale=(1.22, 0.86, 1.15)),
+        torso = ico((0, 0.01, 0.95), 0.20, sub=2, scale=(1.22, 0.86, 1.15))
+        if NECKLINE == "open":   # dark tee body; the jacket is two smooth panels left open at the front
+            obj("Human_Torso", [torso], mat("M_Char_Tee", (0.03, 0.03, 0.035)), C, root)
+            body = [ico((sx * 0.125, -0.002, 0.95), 0.20, sub=2, scale=(0.62, 0.9, 1.15)) for sx in (1, -1)]
+        else:
+            body = [torso]
+        body += [
                 ico((0.20, 0.0, 1.06), 0.10, sub=2), ico((-0.20, 0.0, 1.06), 0.10, sub=2)]
         def sleeve(pts, r0, r1):                     # smooth puffy tube (reference sleeves)
             return hair_lock(pts, r0, r1, seg=12, flat=(1.0, 1.0), tip=1.0)
@@ -348,17 +355,9 @@ def build_human(C):
                                      cyl_between((-0.04, -0.15, 1.10), (-0.05, -0.19, 0.98), 0.006, 5)],
             mat("M_Char_Strings", (0.92, 0.92, 0.90)), C, root)
     elif OUTFIT in ("yellow", "lavender"):   # puffy jacket: soft lapels over a dark tee
-        # Flat lapel strips lying on the chest in a V (no rounded lumps)
-        obj("Human_Outfit_Collar", [box((0.045, -0.166, 1.03), (0.042, 0.012, 0.17), rot=(8, 16, 0)),
-                                    box((-0.045, -0.166, 1.03), (0.042, 0.012, 0.17), rot=(8, -16, 0)),
-                                    ico((0, 0.04, 1.13), 0.13, sub=2, scale=(1.05, 0.65, 0.4))],
-            cloth_dark, C, root)
-        # Puffy rolled jacket collar around the neck (no inner shirt blob): a soft
-        # ring in a slightly deeper shade, with the lapels meeting below it
-        obj("Human_Outfit_TeeCollar", [torus((0, -0.015, 1.105), 0.078, 0.032, rot=(-12, 0, 0), seg=20, mseg=8)],
-            cloth_dark, C, root)
-        obj("Human_Outfit_Zip", [box((0, -0.168, 0.99), (0.008, 0.012, 0.17))],
-            mat("M_Char_Zip", (0.55, 0.50, 0.62)), C, root)
+        # Neckline: a soft rolled collar around the base of the neck (both styles)
+        obj("Human_Outfit_TeeCollar", [torus((0, -0.015, 1.105), 0.078, 0.03, rot=(-12, 0, 0), seg=20, mseg=8)],
+            cloth_dark if NECKLINE == "crew" else cloth, C, root)
     elif OUTFIT == "jacket":
         obj("Human_Outfit_Collar", [box((0.065, -0.10, 1.11), (0.085, 0.025, 0.07), rot=(20, 0, -25)),
                                     box((-0.065, -0.10, 1.11), (0.085, 0.025, 0.07), rot=(20, 0, 25)),
