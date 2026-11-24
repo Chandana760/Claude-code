@@ -57,7 +57,9 @@ frames = sorted(glob.glob(os.path.join(FRAMES, "f*.jpg")))
 for i, f in enumerate(frames):
     os.symlink(os.path.abspath(f), f"{seq}/{i:05d}.jpg")
 
-cmd = ["ffmpeg", "-v", "error", "-y", "-framerate", "12", "-i", f"{seq}/%05d.jpg"]
+nums = [int(os.path.basename(f)[1:6]) for f in frames]
+step = (nums[1] - nums[0]) if len(nums) > 1 else 2          # rendered on ones (1) or twos (2)
+cmd = ["ffmpeg", "-v", "error", "-y", "-framerate", str(24 // step), "-i", f"{seq}/%05d.jpg"]
 for p, _, _ in caps:
     cmd += ["-i", p]
 cmd += ["-i", os.path.join(EP_DIR, "mix.wav")]

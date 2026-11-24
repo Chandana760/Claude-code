@@ -113,6 +113,95 @@ def k(obj, path, value, frame, index=-1):
         obj.keyframe_insert(path, frame=frame)
 
 
+# ------------------------------------------------------------ voice analysis
+LEAD_FRAMES = 1        # mouth shapes land a frame before the sound (reads as in sync)
+
+
+def analyze_voice():
+    """Per-frame visemes from the voices-only track (dialogue.wav).
+
+    Returns {who: {frame: (open, wide, round)}} where
+      open  = loudness, normalised per line, gated so pauses close the mouth
+      wide  = share of high-frequency energy (ee / s / t sounds -> wide, flat mouth)
+      round = share of low-frequency energy (oo / oh -> small round mouth)
+    """
+    import subprocess
+    import numpy as np
+    sr = 16000
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", os.path.join(EP_DIR, "dialogue.wav"),
+                          "-ac", "1", "-ar", str(sr), "-f", "f32le", "-"], capture_output=True, check=True).stdout
+    audio = np.frombuffer(raw, dtype=np.float32)
+    hop, win = sr // FPS, 1024
+    window = np.hanning(win)
+    freqs = np.fft.rfftfreq(win, 1.0 / sr)
+    low = (freqs >= 150) & (freqs < 900)
+    mid = (freqs >= 900) & (freqs < 2500)
+    high = (freqs >= 2500) & (freqs < 7500)
+
+    out = {"M": {}, "C": {}}
+    for l in LINES:
+        f0 = int(l["t"] * FPS)
+        f1 = int((l["t"] + l["d"]) * FPS) + 2
+        rows = []
+        for f in range(f0, f1):
+            c = int((f + 0.5) / FPS * sr)
+            seg = audio[max(0, c - win // 2): c + win // 2]
+            if len(seg) < win:
+                seg = np.pad(seg, (0, win - len(seg)))
+            spec = np.abs(np.fft.rfft(seg * window)) ** 2
+            el, em, eh = spec[low].sum(), spec[mid].sum(), spec[high].sum()
+            rms = float(np.sqrt(np.mean(seg ** 2)))
+            tot = el + em + eh + 1e-12
+            rows.append((f, rms, eh / tot, el / tot))
+        peak = np.percentile([r[1] for r in rows], 92) + 1e-9
+        prev = 0.0
+        for f, rms, hi, lo in rows:
+            o = max(0.0, min(1.0, rms / peak))
+            o = 0.0 if o < 0.12 else (o - 0.12) / 0.88          # gate: pauses / m b p close fully
+            o = o ** 0.8
+            o = 0.6 * o + 0.4 * max(o, prev * 0.55)              # quick attack, soft release
+            prev = o
+            wide = max(0.0, min(1.0, (hi - 0.06) / 0.22))
+            rnd = max(0.0, min(1.0, (lo - 0.86) / 0.1))
+            out[l["who"]][f + 1 - LEAD_FRAMES] = (o, wide, rnd)   # frame numbers are 1-based
+    return out
+
+
+def add_mouth_visemes():
+    """Extra mouth shape keys on the plane mouth: Talk_Wide (ee/s) and Talk_O (oo/oh)."""
+    ob = bpy.data.objects["Human_Mouth"]
+    kb = ob.data.shape_keys.key_blocks
+    if "Talk_Wide" in kb and "Talk_O" in kb:
+        return
+    basis = [v.co.copy() for v in ob.data.vertices]
+    mz = sum(c.z for c in basis) / len(basis)
+
+    def make(name, fn):
+        k = ob.shape_key_add(name=name, from_mix=False)
+        for i, c in enumerate(basis):
+            k.data[i].co = fn(c.copy())
+
+    def wide(c):                      # stretched sideways, slightly parted
+        inner = abs(c.x) < 0.015
+        c.x *= 1.28
+        if c.z < mz:
+            c.z -= 0.009 if inner else 0.004
+        elif inner:
+            c.z += 0.002
+        return c
+
+    def round_o(c):                   # narrow and tall, rounded
+        inner = abs(c.x) < 0.015
+        c.x *= 0.5
+        if c.z < mz:
+            c.z -= 0.022 if inner else 0.015
+        else:
+            c.z += 0.006 if inner else 0.003
+        return c
+    make("Talk_Wide", wide)
+    make("Talk_O", round_o)
+
+
 # ---------------------------------------------------------------- animation
 SHOT_CAM = {"maya": "Cam_Human", "claude": "Cam_Mascot", "wide": "Cam_Wide"}
 
@@ -161,6 +250,9 @@ def animate():
         v.co -= c
     eyes.location = c
 
+    vis = analyze_voice()
+    add_mouth_visemes()
+
     # Natural blinks for Maya (every 2.5-4.5 s) and the mascot (every 3-6 s)
     rnd = random.Random(7)
     maya_blinks, t = [], 1.5
@@ -190,7 +282,11 @@ def animate():
         since = t - last_m["t"] if last_m else 0.0
         fade_in = ease(since / 0.35) if last_m else 0.0
 
-        talk = clamp(me_env * 1.15) if ml else 0.0
+        o, wd, rd = vis["M"].get(f, (0.0, 0.0, 0.0))
+        talk = clamp(1.5 * o * (1 - 0.5 * wd) * (1 - 0.6 * rd))   # "ah"
+        talk_w = clamp(1.3 * o * wd)                         # "ee" / "s"
+        talk_o = clamp(1.3 * o * rd)                         # "oo" / "oh"
+        me_env = o
         smile = 0.0
         lid = blink_amount(t, maya_blinks)
         brow_dz = 0.0
@@ -231,6 +327,10 @@ def animate():
 
         mouth["Talk_Open"].value = talk
         mouth["Talk_Open"].keyframe_insert("value", frame=f)
+        mouth["Talk_Wide"].value = talk_w
+        mouth["Talk_Wide"].keyframe_insert("value", frame=f)
+        mouth["Talk_O"].value = talk_o
+        mouth["Talk_O"].keyframe_insert("value", frame=f)
         mouth["Smile"].value = smile
         mouth["Smile"].keyframe_insert("value", frame=f)
         lids["Blink"].value = clamp(lid)
@@ -241,7 +341,7 @@ def animate():
         head.keyframe_insert("rotation_euler", frame=f)
 
         # ---------------- Claude mascot ----------------
-        ce = env_s(t, "C")
+        ce = vis["C"].get(f, (0.0, 0.0, 0.0))[0]
         cl_line = cl
         last_c = last_line_of(t, "C")
         cact = last_c["act"] if last_c else ""
