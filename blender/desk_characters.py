@@ -288,8 +288,8 @@ def build_human(C):
         _sb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
     cloth = mat("M_Char_Outfit", OUTFITS[OUTFIT])
     cloth_dark = mat("M_Char_OutfitTrim", tuple(c * 0.7 for c in OUTFITS[OUTFIT]))
-    hair = mat("M_Char_Hair", (0.012, 0.008, 0.007))      # near-black brown
-    _principled(hair).inputs["Roughness"].default_value = 0.5   # soft sheen on the strands
+    hair = mat("M_Char_Hair", (0.016, 0.009, 0.006))      # dark chocolate (reference)
+    _principled(hair).inputs["Roughness"].default_value = 0.85  # matte: no purple sheen from the window
     ink = mat("M_Char_FaceInk", (0.03, 0.03, 0.04))
     white = mat("M_Char_EyeWhite", (0.95, 0.95, 0.93))
     frame_col = {"big": (0.008, 0.008, 0.01), "round": (0.06, 0.05, 0.07)}.get(GLASSES, (0.12, 0.06, 0.05))
@@ -535,30 +535,34 @@ def build_human(C):
         hc = Vector((0, 0.02, HZ + 0.01))
         hr = 0.245
 
-        def on_head(d):
+        def on_head(d, r=hr):
             d = Vector(d).normalized()
-            return hc + Vector((d.x * hr * 1.04, d.y * hr * 0.98, d.z * hr))
+            return hc + Vector((d.x * r * 1.04, d.y * r * 0.98, d.z * r))
 
-        def path(d0, d1, steps=8):
+        def path(d0, d1, steps=8, r=hr):
             a0, a1 = Vector(d0).normalized(), Vector(d1).normalized()
-            return [on_head(a0.slerp(a1, i / steps)) for i in range(steps + 1)]
+            return [on_head(a0.slerp(a1, i / steps), r) for i in range(steps + 1)]
 
         hair_parts = [ico((0, 0.03, HZ + 0.03), 0.226, sub=2, scale=(1.06, 1.0, 0.95),
                           cut=lambda co: co.y < -0.05 and co.z < HZ + 0.07)]
-        N = 9
+        N = 7
+        rnd_h = random.Random(21)
         for side in (1, -1):
             for j in range(N):
                 t = j / (N - 1)
-                root = (side * 0.035 - 0.03, -0.42 + 0.95 * t, 1.0)      # along the part, front -> crown
-                az = math.radians(-48 + 138 * t)                         # front corner -> back
-                el = 0.22 - 0.34 * t
+                root = (side * 0.035 - 0.03, -0.85 + 1.4 * t, 1.0)       # along the part, front hairline -> crown
+                az = math.radians(-36 + 126 * t)                         # front clumps arc over the forehead to the temples
+                el = 0.14 - 0.26 * t
                 end = (side * math.cos(az), math.sin(az), el)
-                pts = path(root, end)
+                # alternate clumps sit slightly proud of their neighbours: dark grooves between clumps
+                pts = path(root, end, r=hr + (0.012 if j % 2 else 0.0))
                 hang = Vector((side * math.cos(az), math.sin(az), 0)) * 0.035
-                drop = 0.36 if j > 0 else 0.30
-                pts += [pts[-1] + hang * (k / 4) + Vector((0, 0.004 * k, -drop * k / 4)) for k in (1, 2, 3, 4)]
-                w, flat = (0.034, (2.0, 0.5)) if j == 0 else (0.05, (2.6, 0.5))
-                hair_parts += hair_lock(pts, w, 0.022, seg=10, normal_from=hc, flat=flat)
+                drop = (0.30 if j == 0 else 0.34) + rnd_h.uniform(-0.04, 0.05)   # uneven clump ends
+                pts += [pts[-1] + hang * (k / 4) * (1 + 0.15 * k) + Vector((0, 0.004 * k, -drop * k / 4))
+                        for k in (1, 2, 3, 4)]
+                # thick faceted clumps (visible edge thickness), pointed tips
+                w, flat = (0.04, (2.0, 0.8)) if j == 0 else (0.058, (2.4, 0.8))
+                hair_parts += hair_lock(pts, w, 0.026, seg=6, normal_from=hc, flat=flat, tip=0.15)
     elif HAIR == "strands":
         # Reference hair: dark cap, then chunky locks from a side part that run
         # over the head and hang behind to the shoulders; a swept fringe of locks
@@ -673,9 +677,8 @@ def build_human(C):
         # the head sits low on the collar so the neck disappears.
         head.scale = (1.08, 1.08, 1.08)            # big head, but adult (not baby) proportions
         head.location.z = HZ + 0.015
-        for o in (head_mesh, hair_ob):
-            for poly in o.data.polygons:
-                poly.use_smooth = True
+        for poly in head_mesh.data.polygons:      # smooth face; hair stays faceted like the reference
+            poly.use_smooth = True
     if FACE == "dots":     # reference face: no eye whites, lids, lashes, blush or brows
         for name in ("Human_EyeWhites", "Human_Eyelids", "Human_Lashes", "Human_Blush", "Human_Eyebrows"):
             o = bpy.data.objects.get(name)
@@ -1023,7 +1026,7 @@ def add_character_key_light():
         for o in list(recv.objects):
             recv.objects.unlink(o)
         for o in bpy.data.objects:
-            if o.name.startswith("Human_") and o.type == "MESH":
+            if o.name.startswith("Human_") and o.type == "MESH" and o.name != "Human_Hair":
                 recv.objects.link(o)
         ob.light_linking.receiver_collection = recv
 
