@@ -223,7 +223,7 @@ def build_human(C):
     skin = mat("M_Char_Skin", (0.88, 0.64, 0.50))
     cloth = mat("M_Char_Outfit", OUTFITS[OUTFIT])
     cloth_dark = mat("M_Char_OutfitTrim", tuple(c * 0.7 for c in OUTFITS[OUTFIT]))
-    hair = mat("M_Char_Hair", (0.045, 0.028, 0.025))
+    hair = mat("M_Char_Hair", (0.022, 0.014, 0.012))
     ink = mat("M_Char_FaceInk", (0.03, 0.03, 0.04))
     white = mat("M_Char_EyeWhite", (0.95, 0.95, 0.93))
     frame_col = (0.06, 0.05, 0.07) if GLASSES == "round" else (0.12, 0.06, 0.05)
@@ -415,15 +415,30 @@ def build_human(C):
         return (co.y < -0.05 and co.z < HZ + 0.09) or co.z < bottom
 
     if HAIR == "bob":
-        # Top cap + a fuller outer shell that flares out to chin length (face
-        # opening cut away), and a side-swept fringe falling to her left.
-        hair_parts = [ico((0, 0.03, HZ + 0.04), 0.215, sub=2, scale=(1.04, 1.0, 0.9),
-                          cut=lambda co: co.y < -0.05 and co.z < HZ + 0.09),
-                      ico((0, 0.02, HZ - 0.03), 0.235, sub=2, scale=(1.12, 0.98, 1.0),
-                          cut=lambda co: co.z < HZ - 0.20
-                          or (abs(co.x) < 0.165 and co.y < -0.05 and co.z < HZ + 0.11)),
-                      ico((-0.035, -0.148, HZ + 0.115), 0.1, sub=2, scale=(1.45, 0.38, 0.5), rot=(0, 20, 0)),
-                      ico((0.11, -0.13, HZ + 0.11), 0.06, sub=2, scale=(1.1, 0.45, 0.7), rot=(0, 35, 0))]
+        # Shoulder-length bob ("lob"): top cap, then a ring of chunky faceted
+        # strands hanging from the crown around the sides and back, two longer
+        # face-framing locks, and a big side-swept fringe across the forehead.
+        hair_parts = [ico((0, 0.03, HZ + 0.04), 0.222, sub=2, scale=(1.06, 1.0, 0.92),
+                          cut=lambda co: co.y < -0.05 and co.z < HZ + 0.085)]
+
+        def strand(angle_deg, radius, length, width, tilt_out=7.0, drop=0.0):
+            a = R(angle_deg)
+            d = Vector((math.cos(a), math.sin(a), 0.0))
+            tangent = Vector((-math.sin(a), math.cos(a), 0.0))
+            rot = Matrix.Rotation(R(-tilt_out), 4, tangent) @ Matrix.Rotation(a + R(90), 4, "Z")
+            centre = Vector((0, 0.03, HZ - 0.12 - drop)) + d * radius
+            mtx = Matrix.Translation(centre) @ rot @ Matrix.Diagonal((width, width * 0.7, length, 1.0))
+
+            def build(bm):
+                bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.0, matrix=mtx)
+            return build
+
+        for i in range(9):                                   # behind the ears + back only
+            ang = 10 + i * 20
+            hair_parts.append(strand(ang, 0.215, 0.19 + 0.012 * math.sin(i * 1.7),
+                                     0.085, tilt_out=9 + 3 * math.cos(i), drop=-0.01))
+        hair_parts += [ico((-0.03, -0.15, HZ + 0.118), 0.11, sub=2, scale=(1.5, 0.36, 0.52), rot=(0, 16, 0)),
+                       ico((0.12, -0.125, HZ + 0.09), 0.065, sub=2, scale=(1.0, 0.45, 0.85), rot=(0, 30, 0))]
     elif HAIR == "long":
         # Cap with only the face cut out, a long back panel past the shoulders,
         # side curtains framing the face and a middle-parted fringe sweeping out.
@@ -468,7 +483,7 @@ def build_human(C):
 
 
 # ------------------------------ mascot -------------------------------------- #
-MASCOT_COLORS = {"orange": (0.85, 0.15, 0.02), "mint": (0.45, 0.92, 0.72), "coral": (1.0, 0.50, 0.45), "yellow": (1.0, 0.90, 0.50)}
+MASCOT_COLORS = {"orange": (0.8, 0.12, 0.01), "mint": (0.45, 0.92, 0.72), "coral": (1.0, 0.50, 0.45), "yellow": (1.0, 0.90, 0.50)}
 
 
 def build_mascot(C):
@@ -502,19 +517,42 @@ def build_mascot(C):
     feet_m = dark_m
 
     if MASCOT_SHAPE == "claude":
-        # Faceted orange blob: a core with seven round lobes around its edge
-        # (gap at the bottom for the feet), two tall black eyes, round feet.
-        cz, ring = 0.128, 0.064
-        lobes = [ico((0, 0, cz), 0.092, sub=2, scale=(1.08, 0.8, 0.95))]
-        for i in range(7):
-            a = R(96 + i * 360 / 7)
-            lobes.append(ico((ring * 1.12 * math.cos(a), 0.006, cz + ring * 0.95 * math.sin(a)), 0.05,
-                             sub=2, scale=(1.0, 0.78, 1.0)))
-        obj("Mascot_Body", lobes, body_m, C, bounce)
-        feet = [ico((x, -0.012, 0.021), 0.028, sub=2, scale=(1.1, 1.0, 0.8)) for x in (0.042, -0.042)]
+        # One faceted body whose outline is pushed into six soft scalloped
+        # lobes (one on top), slightly wider than tall, flattened front-to-back;
+        # two tall black eyes and two round feet tucked underneath.
+        cz = 0.12
+
+        def scalloped(bm):
+            # core + 8 overlapping round lobes = soft scalloped outline
+            # big faceted core; lobes only bulge ~2 cm past it, so the outline
+            # reads as one blob with gentle scallops rather than separate balls
+            core = Matrix.LocRotScale(Vector((0, 0, cz)), None, Vector((1.15, 0.82, 0.95)))
+            bmesh.ops.create_icosphere(bm, subdivisions=2, radius=0.09, matrix=core)
+            # (angle from +x, distance, lobe radius): a top bump, four big corner
+            # lobes (the "shoulders" and "hips") and small bulges at the sides
+            for ang, dist, r in ((90, 0.075, 0.055),
+                                 (35, 0.085, 0.058), (145, 0.085, 0.058),
+                                 (-35, 0.08, 0.058), (-145, 0.08, 0.058),
+                                 (0, 0.09, 0.045), (180, 0.09, 0.045)):
+                a = R(ang)
+                m = Matrix.LocRotScale(Vector((1.1 * dist * math.cos(a), 0.0, cz + dist * math.sin(a))),
+                                       None, Vector((1.0, 0.8, 1.0)))
+                bmesh.ops.create_icosphere(bm, subdivisions=2, radius=r, matrix=m)
+        body = obj("Mascot_Body", [scalloped], body_m, C, bounce)
+        # Fuse the overlapping balls into one continuous surface, soften the
+        # seams into gentle notches, then re-facet it low-poly.
+        rm = body.modifiers.new("Fuse", "REMESH")
+        rm.mode, rm.voxel_size = "VOXEL", 0.005
+        if hasattr(rm, "use_smooth_shade"):
+            rm.use_smooth_shade = False
+        sm = body.modifiers.new("SoftenSeams", "SMOOTH")
+        sm.factor, sm.iterations = 0.5, 3
+        dc = body.modifiers.new("LowPoly", "DECIMATE")
+        dc.ratio = 0.04
+        feet = [ico((x, -0.012, 0.024), 0.026, sub=2, scale=(1.15, 1.0, 0.85)) for x in (0.034, -0.034)]
         feet_m = body_m
-        eye = (0.012, 0.004, 0.034)
-        eye_pos, eye_y = (0.032, 0.135), -0.072
+        eye = (0.0125, 0.002, 0.04)
+        eye_pos, eye_y = (0.034, 0.128), -0.079
     elif MASCOT_SHAPE == "robot":
         obj("Mascot_Body", [rbox((0, 0, 0.095), (0.14, 0.13, 0.135), 0.022)], body_m, C, bounce)
         obj("Mascot_Details", [cyl((0, 0, 0.18), 0.005, 0.005, 0.035, seg=5),
@@ -557,8 +595,10 @@ def build_mascot(C):
 
     obj("Mascot_Feet", feet, feet_m, C, bounce)
     ex, ez = eye_pos
-    obj("Mascot_Eyes", [box((x, eye_y, ez), eye) for x in (ex, -ex)], eye_m, C, bounce)
-    focus = empty("Mascot_FocusTarget", C, bounce, loc=(0, -0.072, 0.13), size=0.03)
+    eyes = obj("Mascot_Eyes", [box((x, eye_y, ez), eye) for x in (ex, -ex)], eye_m, C, bounce)
+    if hasattr(eyes, "visible_shadow"):
+        eyes.visible_shadow = False          # no dark smudge from the key light
+    focus = empty("Mascot_FocusTarget", C, bounce, loc=(0, -0.08, 0.128), size=0.03)
     return root, focus
 
 
@@ -576,7 +616,7 @@ def retarget_cameras(human_focus, mascot_focus):
         cam.data.dof.focus_object = focus
 
     place("Cam_Human", (0.20, -0.85, 1.32), (0.45, 0.50, 1.22), 50, human_focus)
-    place("Cam_Mascot", (0.05, -0.80, 0.89), (0.14, -0.20, 0.86), 45, mascot_focus)
+    place("Cam_Mascot", (0.06, -0.95, 0.99), (0.14, -0.20, 0.86), 42, mascot_focus)
 
 
 def demo_animation(mouth_keys, lid_keys, mascot_root):
