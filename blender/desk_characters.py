@@ -29,10 +29,10 @@ from mathutils import Euler, Matrix, Vector
 
 # ----------------------------- variant switches ----------------------------- #
 HAIR = "bob"            # "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
-GLASSES = "big"         # "big" = large thin black round (reference) | "round" = thin round | "rect" = chunky rectangular
+GLASSES = "none"        # "none" = no glasses | "big" = large thin black round (reference) | "round" = thin round | "rect" = chunky rectangular
 STYLE = "chibi"         # "chibi" = big smooth head on a small low-poly body (reference mix) | "lowpoly" = all faceted
 FACE = "dots"            # "dots" = small black dot eyes with a glint (reference) | "ovals" = white eyes, lids, lashes, brows
-OUTFIT = "yellow"       # "yellow" = puffy yellow jacket + dark tee (reference) | "hoodie" = cobalt hoodie | "jacket" = olive jacket | "sweater" = burnt orange
+OUTFIT = "lavender"     # "lavender" = lilac jacket + dark tee | "yellow" = yellow jacket + dark tee (reference) | "hoodie" = cobalt hoodie | "jacket" = olive jacket | "sweater" = burnt orange
 MASCOT_SHAPE = "claude"  # "claude" = orange lobed Claude blob | "robot" = round robot cube | "fox" = crystal fox | "cactus" = geometric cactus
 MASCOT_COLOR = "orange"  # "orange" (Claude) | "mint" | "coral" | "yellow"
 DEMO_ANIMATION = True   # blinks + talk on the Cam_Human shot, hop/tilt on the Cam_Mascot shot
@@ -216,14 +216,22 @@ def remove_old_characters():
 OUTFITS = {
     "hoodie": (0.06, 0.20, 0.78),    # cobalt blue
     "jacket": (0.33, 0.38, 0.17),    # olive green
-    "yellow": (0.88, 0.58, 0.0),     # lemon-golden yellow (reads yellow under the warm key)
+    "yellow": (0.60, 0.46, 0.0),     # lemon-shifted so it still reads yellow under the warm key
+    "lavender": (0.26, 0.13, 0.58),  # lavender / lilac (deep enough to survive the warm key)
     "sweater": (0.80, 0.33, 0.10),   # burnt orange
 }
 
 
 def build_human(C):
     rnd = random.Random(5)
-    skin = mat("M_Char_Skin", (0.90, 0.56, 0.42))
+    skin = mat("M_Char_Skin", (0.85, 0.31, 0.19))      # warm peach-pink (reference)
+    _sb = _principled(skin)
+    for n, v in (("Subsurface Weight", 0.35), ("Subsurface", 0.35), ("Subsurface Scale", 0.03),
+                 ("Roughness", 0.55), ("Specular IOR Level", 0.35), ("Sheen Weight", 0.15)):
+        if n in _sb.inputs:
+            _sb.inputs[n].default_value = v
+    if "Subsurface Radius" in _sb.inputs:
+        _sb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
     cloth = mat("M_Char_Outfit", OUTFITS[OUTFIT])
     cloth_dark = mat("M_Char_OutfitTrim", tuple(c * 0.7 for c in OUTFITS[OUTFIT]))
     hair = mat("M_Char_Hair", (0.022, 0.014, 0.012))
@@ -266,7 +274,7 @@ def build_human(C):
         obj("Human_Outfit_Strings", [cyl_between((0.04, -0.15, 1.10), (0.05, -0.19, 0.98), 0.006, 5),
                                      cyl_between((-0.04, -0.15, 1.10), (-0.05, -0.19, 0.98), 0.006, 5)],
             mat("M_Char_Strings", (0.92, 0.92, 0.90)), C, root)
-    elif OUTFIT == "yellow":                 # reference: puffy yellow jacket, dark tee in a V
+    elif OUTFIT in ("yellow", "lavender"):   # jacket with lapels over a dark tee
         obj("Human_Outfit_Collar", [box((0.075, -0.105, 1.10), (0.09, 0.035, 0.09), rot=(18, 0, -28)),
                                     box((-0.075, -0.105, 1.10), (0.09, 0.035, 0.09), rot=(18, 0, 28)),
                                     box((0.08, -0.155, 0.98), (0.05, 0.03, 0.22), rot=(0, -6, 0)),    # lapels
@@ -290,7 +298,7 @@ def build_human(C):
             cloth_dark, C, root)
 
     # Neck + big rounded head
-    neck_m = mat("M_Char_TeeNeck", (0.025, 0.025, 0.03)) if OUTFIT == "yellow" else skin
+    neck_m = mat("M_Char_TeeNeck", (0.025, 0.025, 0.03)) if OUTFIT in ("yellow", "lavender") else skin
     obj("Human_Neck", [cyl((0, 0, 1.13), 0.05, 0.05, 0.07, seg=6)], neck_m, C, root)
     head_mesh = obj("Human_HeadMesh", [ico((0, 0, HZ), 0.20, sub=3 if STYLE == "chibi" else 2, scale=(1.0, 0.92, 0.95)),
                            ico((0.198, 0.0, HZ - 0.01), 0.03, sub=1, scale=(0.5, 1, 1)),   # ears
@@ -513,6 +521,10 @@ def build_human(C):
     hair_ob = obj("Human_Hair", hair_parts, hair, C, **hp)
 
     focus = empty("Human_FocusTarget", C, head, loc=(0, -0.18, 0), size=0.03)
+    if GLASSES == "none":
+        g = bpy.data.objects.get("Human_Glasses")
+        if g:
+            bpy.data.objects.remove(g, do_unlink=True)
     if STYLE == "chibi":
         # Chibi mix: oversized, smooth-shaded head and hair on the faceted body;
         # the head sits low on the collar so the neck disappears.
@@ -845,12 +857,41 @@ def add_mascot_rim_light():
         ob.light_linking.receiver_collection = recv
 
 
+def add_character_key_light():
+    """Warm #FF9A5C key on Maya's face from front-right (frame right), light-linked
+    to her only: gives the glowing peach skin and golden jacket of the reference
+    without brightening the room."""
+    old = bpy.data.objects.get("Key_MayaWarm")
+    if old:
+        bpy.data.objects.remove(old, do_unlink=True)
+    ld = bpy.data.lights.get("Key_MayaWarm") or bpy.data.lights.new("Key_MayaWarm", "AREA")
+    ld.color = hex_linear("#FFB07A")
+    ld.energy = 45
+    ld.size = 0.45
+    ob = bpy.data.objects.new("Key_MayaWarm", ld)
+    (bpy.data.collections.get("Lighting") or bpy.context.scene.collection).objects.link(ob)
+    head = Vector(HUMAN_POS) + Vector((0, -0.08, HZ))
+    ob.location = head + Vector((0.42, -0.55, 0.30))
+    ob.rotation_euler = (head - ob.location).to_track_quat("-Z", "Y").to_euler()
+    if hasattr(ob, "visible_camera"):
+        ob.visible_camera = False
+    if hasattr(ob, "light_linking"):
+        recv = bpy.data.collections.get("Maya_KeyReceivers") or bpy.data.collections.new("Maya_KeyReceivers")
+        for o in list(recv.objects):
+            recv.objects.unlink(o)
+        for o in bpy.data.objects:
+            if o.name.startswith("Human_") and o.type == "MESH":
+                recv.objects.link(o)
+        ob.light_linking.receiver_collection = recv
+
+
 def main():
     C = remove_old_characters()
     _, human_focus, mouth_keys, lid_keys = build_human(C)
     mascot_root, mascot_focus = build_mascot(C)
     retarget_cameras(human_focus, mascot_focus)
     add_mascot_rim_light()
+    add_character_key_light()
     if DEMO_ANIMATION:
         demo_animation(mouth_keys, lid_keys, mascot_root)
     bpy.context.view_layer.update()
