@@ -202,6 +202,25 @@ def add_mouth_visemes():
     make("Talk_O", round_o)
 
 
+def style_for_episode():
+    """Reference-style tweaks: darker, smaller mouth; tighter close-up on Maya;
+    shallow depth of field so the window lights turn into big bokeh."""
+    m = bpy.data.materials.get("M_Char_Mouth")
+    if m:
+        bsdf = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+        bsdf.inputs["Base Color"].default_value = (0.07, 0.015, 0.02, 1)
+    cams = {"Cam_Human": ((0.26, -0.68, 1.42), (0.45, 0.45, 1.20), 50, 1.6),
+            "Cam_Mascot": ((0.06, -1.02, 0.98), (0.14, -0.20, 0.89), 45, 1.6)}
+    for name, (loc, tgt, lens, fstop) in cams.items():
+        cam = bpy.data.objects[name]
+        cam.location = loc
+        cam.rotation_euler = (Vector(tgt) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
+        cam.data.lens = lens
+        cam.data.dof.aperture_fstop = fstop
+        if "base_lens" in cam:
+            del cam["base_lens"]
+
+
 # ---------------------------------------------------------------- animation
 SHOT_CAM = {"maya": "Cam_Human", "claude": "Cam_Mascot", "wide": "Cam_Wide"}
 
@@ -214,6 +233,8 @@ def animate():
         bpy.context.preferences.edit.keyframe_new_interpolation_type = "LINEAR"
     except Exception:
         pass
+
+    style_for_episode()
 
     # Camera cuts + slow push-in (lens +5% across each shot)
     sc.timeline_markers.clear()
@@ -283,9 +304,9 @@ def animate():
         fade_in = ease(since / 0.35) if last_m else 0.0
 
         o, wd, rd = vis["M"].get(f, (0.0, 0.0, 0.0))
-        talk = clamp(1.5 * o * (1 - 0.5 * wd) * (1 - 0.6 * rd))   # "ah"
-        talk_w = clamp(1.3 * o * wd)                         # "ee" / "s"
-        talk_o = clamp(1.3 * o * rd)                         # "oo" / "oh"
+        talk = clamp(0.95 * o * (1 - 0.5 * wd) * (1 - 0.6 * rd))  # "ah" (subtle, like the reference)
+        talk_w = clamp(0.8 * o * wd)                         # "ee" / "s"
+        talk_o = clamp(0.8 * o * rd)                         # "oo" / "oh"
         me_env = o
         smile = 0.0
         lid = blink_amount(t, maya_blinks)
@@ -307,7 +328,9 @@ def animate():
             if ml and abs(t - (ml["t"] + ml["d"] - 0.25)) < 0.12:   # playful blink at the end
                 lid = 1.0
         if ml:
-            hx += me_env * 0.05                      # little nods on stressed syllables
+            hx += me_env * 0.035                     # little nods on stressed syllables
+        hx += 0.018 * math.sin(t * 0.7)              # slow idle head drift
+        hy += 0.03 * math.sin(t * 0.45 + 1.0)
 
         # While Claude talks, Maya turns toward the mascot (down and to her right)
         cl = speaking(t, "C")
@@ -347,32 +370,35 @@ def animate():
         cact = last_c["act"] if last_c else ""
         csince = t - last_c["t"] if last_c else 0.0
         hop = 0.0
-        squash = 0.06 * math.sin(t * 2.4)            # idle breathing
-        tilt = 0.0
+        squash = 0.035 * math.sin(t * 2.2)           # gentle idle breathing
+        tilt = 0.0                                   # stays upright: no talking lean
         rz = root_rz
         eye_z = 1.0
 
+        def bump(x, a, b):                           # 0 -> 1 -> 0 between a and b
+            return math.sin(math.pi * clamp((x - a) / (b - a))) if a <= x <= b else 0.0
+
         if cl_line:
-            squash += -0.28 * ce                     # stretch tall on loud syllables
-            tilt += 0.18 * ce * math.sin(t * 7.0)    # talking wobble
-        if cact in ("bounce", "excited") and csince < 1.6:
-            n = 9.0 if cact == "bounce" else 11.0
-            amp = (0.55 if cact == "bounce" else 0.9) * clamp(1 - csince / 1.6)
-            h = abs(math.sin(csince * n))
-            hop = amp * h
-            squash += amp * (0.7 * (1 - h) ** 6 - 0.35 * h)
-            if cact == "excited":
-                tilt += 0.35 * math.sin(csince * 5.5) * clamp(1 - csince / 1.6)
+            squash += -0.10 * ce                     # tiny upright pulse on syllables
+        if cact in ("bounce", "excited") and last_c:
+            hops = (0.0,) if cact == "bounce" else (0.0, 0.62)
+            amp = 0.32 if cact == "bounce" else 0.45
+            for h0 in hops:
+                s = csince - h0
+                squash += 0.30 * bump(s, 0.0, 0.10)              # anticipation squat
+                air = bump(s, 0.10, 0.50)
+                hop = max(hop, amp * air)
+                squash -= 0.22 * air                              # stretch in the air
+                squash += 0.32 * bump(s, 0.50, 0.66)             # landing squash
         if cact == "look-away" and last_c:
             w = ease(csince / 0.35) * (1 - ease((csince - last_c["d"] - 0.3) / 0.4))
-            rz = root_rz - math.radians(38) * w
-            tilt += 0.25 * w
+            rz = root_rz - math.radians(25) * w      # turns away, no lean
         if cact == "squint" and last_c:
             w = ease((csince - 0.1) / 0.3) * (1 - ease((csince - last_c["d"] - 0.4) / 0.3))
             eye_z = 1 - 0.7 * w
-        if cact == "tilt" and last_c:
-            w = ease(csince / 0.4) * (1 - ease((csince - last_c["d"] - 0.3) / 0.4))
-            tilt += 0.55 * w
+        if cact == "tilt" and last_c:                # brief curious head-tilt, then upright
+            w = ease(csince / 0.3) * (1 - ease((csince - 0.9) / 0.4))
+            tilt = 0.22 * w
         eye_z *= 1 - 0.9 * blink_amount(t, mascot_blinks, 0.14)
 
         root["hop"], root["tilt"], root["squash"] = clamp(hop), clamp(tilt, -1, 1), clamp(squash, -1, 1)
