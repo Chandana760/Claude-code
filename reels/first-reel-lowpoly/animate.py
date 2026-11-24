@@ -373,7 +373,8 @@ def animate():
             pupils.keyframe_insert("scale", index=2, frame=f)
         brows.location = brow_base + Vector((0, 0, brow_dz))
         brows.keyframe_insert("location", index=2, frame=f)
-        head.rotation_euler = (hx, hy, hz)
+        # resting pose like the reference: head turned a little and tipped down
+        head.rotation_euler = (hx + 0.07, hy + 0.06, hz - 0.12)
         head.keyframe_insert("rotation_euler", frame=f)
 
         # ---------------- Claude mascot ----------------

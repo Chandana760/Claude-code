@@ -363,10 +363,10 @@ def build_human(C):
     # Neck + big rounded head
     neck_m = mat("M_Char_TeeNeck", (0.025, 0.025, 0.03)) if OUTFIT in ("yellow", "lavender") else skin
     obj("Human_Neck", [cyl((0, 0, 1.13), 0.05, 0.05, 0.07, seg=6)], neck_m, C, root)
-    head_mesh = obj("Human_HeadMesh", [ico((0, 0, HZ), 0.20, sub=3 if STYLE == "chibi" else 2, scale=(1.0, 0.92, 0.95)),
+    head_mesh = obj("Human_HeadMesh", [ico((0, 0, HZ), 0.20, sub=3 if STYLE == "chibi" else 2, scale=(1.0, 0.92, 1.03)),   # slightly oval: adult chin
                            ico((0.198, 0.0, HZ - 0.01), 0.03, sub=1, scale=(0.5, 1, 1)),   # ears
                            ico((-0.198, 0.0, HZ - 0.01), 0.03, sub=1, scale=(0.5, 1, 1)),
-                           ico((0, -0.181, HZ - 0.035), 0.016 if FACE != "dots" else 0.011, sub=1)],  # nose
+                           ico((0, -0.182, HZ - 0.035), 0.016 if FACE != "dots" else 0.014, sub=1, scale=(0.9, 1.0, 1.15))],  # nose
         skin, C, **hp)
 
     # Eyes: white ovals + black pupils
@@ -383,9 +383,9 @@ def build_human(C):
                     fc.material_index = 1
             return b
         parts = []
-        for x in (0.072, -0.072):
-            parts.append(ico((x, -0.172, HZ - 0.008), 0.019, sub=2, scale=(0.8, 0.35, 1.05)))
-            parts.append(glint((x + 0.006, -0.1795, HZ - 0.001)))
+        for x in (0.078, -0.078):                 # adult proportions: smaller, higher, wider apart
+            parts.append(ico((x, -0.169, HZ + 0.006), 0.016, sub=2, scale=(0.8, 0.35, 1.05)))
+            parts.append(glint((x + 0.005, -0.1755, HZ + 0.012)))
         pupils = obj("Human_Pupils", parts, ink, C, **hp)
         pupils.data.materials.append(mat("M_Char_EyeGlint", (1.0, 1.0, 1.0), emit=2.0))
     else:
@@ -464,8 +464,8 @@ def build_human(C):
     obj("Human_Eyebrows", brows, hair, C, **hp)
 
     # Mouth: dark 4x2-vertex plane (shape keys: Closed / Talk_Open / Smile)
-    MZ, MY = HZ - 0.085, -0.174
-    xs = (-0.026, -0.009, 0.009, 0.026)
+    MZ, MY = HZ - 0.105, -0.163                # lower mouth reads older
+    xs = (-0.019, -0.0065, 0.0065, 0.019)           # small mouth
 
     def mouth_plane(bm):
         top = [bm.verts.new((x, MY, MZ + 0.003)) for x in xs]
@@ -545,9 +545,12 @@ def build_human(C):
             base = pts[-1]
             pts += [base + out * (k / 3) + Vector((0, 0, -0.09 * k)) for k in (1, 2, 3)]
             hair_parts += hair_lock(pts, 0.034, 0.016, normal_from=hc)
-        for az_deg, el in ((-118, 0.45), (-106, 0.40), (-94, 0.36), (-82, 0.38), (-70, 0.42), (-58, 0.47)):   # swept fringe
+        # Side-swept fringe: from the part, diagonally across the forehead and
+        # down past her left temple (an adult swoop, not a straight-cut bang)
+        for az_deg, el, w in ((-105, 0.62, 0.036), (-90, 0.50, 0.038), (-72, 0.38, 0.038),
+                              (-55, 0.22, 0.036), (-40, 0.05, 0.034)):
             az = math.radians(az_deg)
-            hair_parts += hair_lock(path(part, (math.cos(az), math.sin(az), el), 8), 0.036, 0.014, normal_from=hc)
+            hair_parts += hair_lock(path(part, (math.cos(az), math.sin(az), el), 9), w, 0.013, normal_from=hc)
         for az_deg in (-40, -140, -30, -150):               # face-framing locks: hug the head, then fall
             az = math.radians(az_deg)
             c, sn = math.cos(az), math.sin(az)
@@ -627,7 +630,7 @@ def build_human(C):
     if STYLE == "chibi":
         # Chibi mix: oversized, smooth-shaded head and hair on the faceted body;
         # the head sits low on the collar so the neck disappears.
-        head.scale = (1.22, 1.22, 1.22)
+        head.scale = (1.08, 1.08, 1.08)            # big head, but adult (not baby) proportions
         head.location.z = HZ + 0.015
         for o in (head_mesh, hair_ob):
             for poly in o.data.polygons:
