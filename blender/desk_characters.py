@@ -510,7 +510,7 @@ def hex_mat(name, hex_color, roughness, subsurface=0.0):
 
 CLAUDE_HEIGHT = 0.24          # metres, bottom of feet to top lobe
 CLAUDE_VOXEL = 0.13           # remesh voxel size in design units (body ~3 units wide)
-CLAUDE_FACET_RATIO = 0.3     # decimate after remesh (1.0 = pure voxel facets)
+CLAUDE_FACET_RATIO = 0.22     # decimate after remesh (1.0 = pure voxel facets)
 
 
 def _evaluated_mesh(ob):
@@ -529,14 +529,16 @@ def build_claude_mascot(C, parent):
     mb = bpy.data.metaballs.new("Claude_Metaball")
     mb.resolution = mb.render_resolution = 0.04
     mb.threshold = 0.6
-    balls = [((0.0, 0.0, 0.0), 1.45),                                  # centre
-             ((0.0, 0.0, 0.92), 0.88),                                 # top lobe
-             ((-0.88, 0.0, 0.40), 0.88), ((0.88, 0.0, 0.40), 0.88),    # upper sides
-             ((-0.76, 0.0, -0.55), 0.88), ((0.76, 0.0, -0.55), 0.88),  # lower sides
-             ((0.0, 0.0, -0.85), 0.82)]                                # bottom centre
-    for co, r in balls:
+    # (position, radius, stiffness): stiffer lobes stay round bulbs with
+    # small notches between them instead of melting into star points
+    balls = [((0.0, 0.0, 0.0), 1.35, 2.0),                             # centre
+             ((0.0, 0.0, 0.95), 0.86, 3.2),                            # top lobe
+             ((-1.06, 0.0, 0.40), 0.86, 3.2), ((1.06, 0.0, 0.40), 0.86, 3.2),  # upper sides
+             ((-0.93, 0.0, -0.58), 0.86, 3.2), ((0.93, 0.0, -0.58), 0.86, 3.2),  # lower sides
+             ((0.0, 0.0, -0.85), 0.8, 3.2)]                            # bottom centre
+    for co, r, stiff in balls:
         el = mb.elements.new()
-        el.type, el.co, el.radius = "BALL", co, r
+        el.type, el.co, el.radius, el.stiffness = "BALL", co, r, stiff
     mb_ob = bpy.data.objects.new("Claude_Metaball", mb)
     C.objects.link(mb_ob)
     raw = _evaluated_mesh(mb_ob)                         # convert metaball -> mesh
@@ -568,8 +570,8 @@ def build_claude_mascot(C, parent):
     foot_r = 0.15 * W
     foot_z = minz + 0.06 * W
     feet_parts = [ico((s * 0.17 * W, -0.05 * W, foot_z), foot_r, sub=1,
-                      scale=(1.1, 1.0, 0.82), rot=(0, s * 10, s * 10)) for s in (-1, 1)]
-    foot_bottom = foot_z - foot_r * 0.82
+                      scale=(1.1, 1.0, 0.95), rot=(0, s * 10, s * 10)) for s in (-1, 1)]
+    foot_bottom = foot_z - foot_r * 0.95
 
     # Scale everything to desk size; origin (z = 0) at the bottom of the feet
     k = CLAUDE_HEIGHT / (maxz - foot_bottom)
@@ -593,7 +595,7 @@ def build_claude_mascot(C, parent):
                                 [tuple(p.vertices) for p in body_me.polygons])
     Wm, body_bot, body_top = W * k, (minz - foot_bottom) * k, (maxz - foot_bottom) * k
     ew, eh = 0.065 * Wm, 0.25 * (body_top - body_bot)
-    ez = body_bot + 0.53 * (body_top - body_bot)
+    ez = body_bot + 0.52 * (body_top - body_bot)
     eye_parts = []
     for ex in (-0.135 * Wm, 0.135 * Wm):
         hits = []
