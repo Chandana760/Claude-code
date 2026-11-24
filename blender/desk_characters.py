@@ -29,7 +29,7 @@ from mathutils import Euler, Matrix, Vector
 
 # ----------------------------- variant switches ----------------------------- #
 HAIR = "strands"        # "strands" = long locks from a side part (reference) | "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
-GLASSES = "none"        # "none" = no glasses | "big" = large thin black round (reference) | "round" = thin round | "rect" = chunky rectangular
+GLASSES = "big"         # "none" = no glasses | "big" = large thin black round (reference) | "round" = thin round | "rect" = chunky rectangular
 STYLE = "chibi"         # "chibi" = big smooth head on a small low-poly body (reference mix) | "lowpoly" = all faceted
 FACE = "dots"            # "dots" = small black dot eyes with a glint (reference) | "ovals" = white eyes, lids, lashes, brows
 OUTFIT = "lavender"     # "lavender" = lilac jacket + dark tee | "yellow" = yellow jacket + dark tee (reference) | "hoodie" = cobalt hoodie | "jacket" = olive jacket | "sweater" = burnt orange
@@ -148,7 +148,7 @@ def puff_chain(p1, p2, r, spacing=0.8, squash=(1.0, 1.0, 1.0)):
             for i in range(n)]
 
 
-def hair_lock(points, r0, r1, seg=8, normal_from=None, flat=(1.8, 0.5)):
+def hair_lock(points, r0, r1, seg=8, normal_from=None, flat=(1.8, 0.5), tip=0.35):
     """A lock of hair swept as ONE continuous tube along `points`: flat
     elliptical cross-section (wide across the head, thin outward) tapering from
     r0 to a near-point tip, so locks lie on the head like smooth strands."""
@@ -169,7 +169,7 @@ def hair_lock(points, r0, r1, seg=8, normal_from=None, flat=(1.8, 0.5)):
             t = i / (n - 1)
             r = r0 + (r1 - r0) * t
             if i == n - 1:
-                r *= 0.35                                    # soft tapered tip
+                r *= tip                                     # soft tapered tip
             ring = []
             for k in range(seg):
                 a = 2 * math.pi * k / seg
@@ -312,10 +312,14 @@ def build_human(C):
         # crossed on the desk
         body = [ico((0, 0.01, 0.95), 0.20, sub=2, scale=(1.22, 0.86, 1.15)),
                 ico((0.20, 0.0, 1.06), 0.10, sub=2), ico((-0.20, 0.0, 1.06), 0.10, sub=2)]
-        body += puff_chain((0.23, -0.02, 1.03), (0.27, -0.20, 0.84), 0.078)     # upper arms
-        body += puff_chain((-0.23, -0.02, 1.03), (-0.27, -0.20, 0.84), 0.078)
-        body += puff_chain((-0.27, -0.21, 0.83), (0.12, -0.29, 0.84), 0.072, squash=(1.0, 1.0, 0.9))  # lower forearm
-        body += puff_chain((0.27, -0.23, 0.87), (-0.12, -0.33, 0.885), 0.072, squash=(1.0, 1.0, 0.9))  # upper forearm
+        def sleeve(pts, r0, r1):                     # smooth puffy tube (reference sleeves)
+            return hair_lock(pts, r0, r1, seg=12, flat=(1.0, 1.0), tip=1.0)
+        for sx in (1, -1):                           # upper arms with soft elbows
+            body += sleeve([(sx * 0.22, 0.0, 1.05), (sx * 0.265, -0.07, 0.98), (sx * 0.28, -0.15, 0.89),
+                            (sx * 0.27, -0.19, 0.85)], 0.088, 0.08)
+            body.append(ico((sx * 0.27, -0.20, 0.845), 0.082, sub=2))
+        body += sleeve([(0.27, -0.21, 0.83), (0.10, -0.27, 0.84), (-0.11, -0.30, 0.85)], 0.074, 0.066)   # lower forearm
+        body += sleeve([(-0.27, -0.22, 0.87), (-0.08, -0.30, 0.885), (0.12, -0.335, 0.90)], 0.074, 0.066)  # upper forearm
     else:
         body = [cyl((0, 0, 0.92), 0.20, 0.15, 0.40, seg=8, scale=(1.2, 0.85, 1.0)),
                 ico((0.20, -0.01, 1.06), 0.075, sub=1),             # shoulders
@@ -327,8 +331,11 @@ def build_human(C):
                 cyl_between((-0.25, -0.21, 0.80), (0.15, -0.29, 0.81), 0.055),  # lower forearm
                 cyl_between((0.25, -0.23, 0.85), (-0.15, -0.33, 0.855), 0.055)]  # upper forearm
     obj("Human_Body", body, cloth, C, root)
-    obj("Human_Hands", [ico((0.17, -0.30, 0.83), 0.038, sub=1, scale=(0.9, 1.0, 0.8)),
-                        ico((-0.17, -0.335, 0.87), 0.038, sub=1, scale=(0.9, 1.0, 0.8))],
+    hands = ([ico((-0.165, -0.31, 0.855), 0.044, sub=2, scale=(1.1, 0.9, 0.85)),   # peeking from the cuffs
+              ico((0.175, -0.345, 0.905), 0.044, sub=2, scale=(1.1, 0.9, 0.85))] if OUTFIT in ("yellow", "lavender") else
+             [ico((0.17, -0.30, 0.83), 0.038, sub=1, scale=(0.9, 1.0, 0.8)),
+              ico((-0.17, -0.335, 0.87), 0.038, sub=1, scale=(0.9, 1.0, 0.8))])
+    obj("Human_Hands", hands,
         skin, C, root)
 
     # Outfit details
@@ -494,7 +501,7 @@ def build_human(C):
 
     # Glasses
     if GLASSES == "big":                     # large thin black round frames (reference)
-        parts = [torus((x, -0.212, HZ - 0.006), 0.08, 0.0028, seg=24) for x in (0.088, -0.088)]
+        parts = [torus((x, -0.212, HZ + 0.004), 0.08, 0.0028, seg=28) for x in (0.086, -0.086)]
         parts.append(cyl_between((-0.009, -0.214, HZ + 0.004), (0.009, -0.214, HZ + 0.004), 0.0028, 5))
         side_x = 0.168
     elif GLASSES == "round":
