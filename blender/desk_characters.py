@@ -286,9 +286,9 @@ def build_human(C):
         skin, C, **hp)
 
     # Eyes: white ovals + black pupils
-    obj("Human_EyeWhites", [ico((x, -0.172, HZ), 0.035, sub=1, scale=(0.8, 0.35, 1.1)) for x in (0.07, -0.07)],
+    obj("Human_EyeWhites", [ico((x, -0.172, HZ), 0.035, sub=2, scale=(0.8, 0.35, 1.1)) for x in (0.07, -0.07)],
         white, C, **hp)
-    obj("Human_Pupils", [ico((x * 0.97, -0.186, HZ - 0.004), 0.016, sub=1, scale=(0.8, 0.4, 1.1))
+    obj("Human_Pupils", [ico((x * 0.97, -0.186, HZ - 0.004), 0.016, sub=2, scale=(0.8, 0.4, 1.1))
                          for x in (0.07, -0.07)], ink, C, **hp)
 
     # Eyelids (shape keys: Open / Blink) — skin-coloured lids above each eye

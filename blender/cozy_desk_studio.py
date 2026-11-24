@@ -109,10 +109,10 @@ def sky_mat():
     nt.links.new(tc.outputs["Generated"], sep.inputs[0])
     nt.links.new(sep.outputs["Z"], ramp.inputs["Fac"])
     els = ramp.color_ramp.elements
-    stops = [(0.36, (1.00, 0.58, 0.55)),   # warm peach at the horizon
-             (0.48, (0.96, 0.36, 0.62)),   # pink
-             (0.62, (0.52, 0.24, 0.72)),   # purple
-             (0.80, (0.10, 0.06, 0.30))]   # deep indigo
+    stops = [(0.40, (1.00, 0.42, 0.38)),   # warm coral at the horizon
+             (0.50, (0.98, 0.25, 0.58)),   # hot pink
+             (0.62, (0.45, 0.16, 0.70)),   # purple
+             (0.76, (0.07, 0.04, 0.24))]   # deep indigo
     els[0].position, els[0].color = stops[0][0], (*stops[0][1], 1)
     els[1].position, els[1].color = stops[-1][0], (*stops[-1][1], 1)
     for pos, col in stops[1:-1]:
@@ -343,7 +343,12 @@ def build_background(C):
         frame, C)
 
     # Twilight sky, moon, stars
-    obj("Sky", [box((0, 6.0, 1.5), (16, 0.05, 10))], sky_mat(), C)
+    sky = obj("Sky", [box((0, 6.0, 1.5), (16, 0.05, 10))], sky_mat(), C)
+    # The sky is a backdrop only: don't let its glow wash the room in purple.
+    for attr in ("visible_diffuse", "visible_glossy", "visible_transmission",
+                 "visible_volume_scatter", "visible_shadow"):
+        if hasattr(sky, attr):
+            setattr(sky, attr, False)
     obj("Moon", [ico((1.25, 5.9, 3.45), 0.30, sub=1)],
         mat("M_Moon", (1.0, 0.93, 0.86), emit=3.0), C)
     stars = [box((rnd.uniform(-2.6, 2.6), 5.95, rnd.uniform(2.9, 4.3)), (0.025,) * 3)
@@ -464,12 +469,12 @@ def build_lights(C, lamp_pos):
         aim(ob, target)
         return ob
 
-    area("Key_DeskWarm", (0.95, -1.10, 1.80), (0.15, 0.25, 0.95), (1.0, 0.55, 0.25), 180, 1.0)
+    area("Key_DeskWarm", (0.95, -1.10, 1.80), (0.15, 0.25, 0.95), (1.0, 0.50, 0.20), 260, 1.0)
     area("Rim_WindowPurple", (0.10, 1.22, 2.00), (0.35, 0.50, 1.20), (0.62, 0.38, 1.0), 220, 1.6, 1.0)
     area("Fill_MonitorGlow", (-0.30, -0.10, 1.00), (0.20, 0.30, 1.10), (0.45, 0.60, 1.0), 8, 0.4)
 
     pd = bpy.data.lights.new("Practical_DeskLamp", "POINT")
-    pd.color, pd.energy, pd.shadow_soft_size = (1.0, 0.60, 0.30), 20, 0.05
+    pd.color, pd.energy, pd.shadow_soft_size = (1.0, 0.55, 0.25), 45, 0.05
     p = bpy.data.objects.new("Practical_DeskLamp", pd)
     C.objects.link(p)
     p.location = lamp_pos
@@ -527,9 +532,12 @@ def setup_render(cams):
                 setattr(sc.eevee, attr, val)
             except Exception:
                 pass
+    # AgX + Punchy with exposure pulled down keeps the flat colours rich
+    # without blowing out faces under the warm key.
     try:
         sc.view_settings.view_transform = "AgX"
         sc.view_settings.look = "AgX - Punchy"
+        sc.view_settings.exposure = -1.0
     except TypeError:
         pass
 
