@@ -215,7 +215,8 @@ def style_for_episode():
         bsdf = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
         bsdf.inputs["Base Color"].default_value = (0.07, 0.015, 0.02, 1)
     cams = {"Cam_Human": ((0.22, -0.98, 1.40), (0.45, 0.45, 1.27), 36, 1.6),   # headroom for captions
-            "Cam_Mascot": ((0.06, -1.02, 0.98), (0.14, -0.20, 0.89), 45, 1.6)}
+            "Cam_Mascot": ((0.06, -1.02, 0.98), (0.14, -0.20, 0.89), 45, 1.6),
+            "Cam_Wide": ((-0.02, -1.85, 1.16), (0.04, 0.30, 1.03), 35, 2.8)}   # tighter, desk-level, monitor in frame (reference)
     for name, (loc, tgt, lens, fstop) in cams.items():
         cam = bpy.data.objects[name]
         cam.location = loc
@@ -355,8 +356,10 @@ def animate():
         elif last_line_of(t, "C") and not ml:
             lc = last_line_of(t, "C")
             listen = 1 - ease((t - (lc["t"] + lc["d"])) / 0.5)
-        hx += 0.10 * listen
-        hz += -0.22 * listen
+        # Reference: while Claude talks she stays still in the background
+        # (no turn toward him; idle drift eases out)
+        hx -= 0.018 * math.sin(t * 0.7) * listen
+        hy -= 0.03 * math.sin(t * 0.45 + 1.0) * listen
 
         # Warm ending: she smiles at the final "Especially those."
         if t >= LINES[-1]["t"] - 0.2:

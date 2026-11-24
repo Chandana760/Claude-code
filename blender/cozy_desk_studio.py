@@ -109,10 +109,10 @@ def sky_mat():
     nt.links.new(tc.outputs["Generated"], sep.inputs[0])
     nt.links.new(sep.outputs["Z"], ramp.inputs["Fac"])
     els = ramp.color_ramp.elements
-    stops = [(0.40, (1.00, 0.42, 0.38)),   # warm coral at the horizon
-             (0.50, (0.98, 0.25, 0.58)),   # hot pink
-             (0.62, (0.45, 0.16, 0.70)),   # purple
-             (0.76, (0.07, 0.04, 0.24))]   # deep indigo
+    stops = [(0.46, (1.00, 0.36, 0.10)),   # warm orange glow, raised so it shows above the buildings
+             (0.58, (1.00, 0.16, 0.40)),   # hot pink
+             (0.70, (0.55, 0.10, 0.55)),   # magenta-purple
+             (0.84, (0.20, 0.07, 0.38))]   # purple
     els[0].position, els[0].color = stops[0][0], (*stops[0][1], 1)
     els[1].position, els[1].color = stops[-1][0], (*stops[-1][1], 1)
     for pos, col in stops[1:-1]:
@@ -121,7 +121,7 @@ def sky_mat():
     nt.links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
     emit_in = _set(bsdf, EMIT_COLOR, (1, 1, 1, 1))
     nt.links.new(ramp.outputs["Color"], emit_in)
-    _set(bsdf, ("Emission Strength",), 1.2)
+    _set(bsdf, ("Emission Strength",), 2.6)                 # bright sunset glow (reference)
     m.diffuse_color = (0.6, 0.3, 0.7, 1)
     return m
 
@@ -198,8 +198,8 @@ def aim(ob, target):
 # --------------------------------------------------------------------------- #
 def build_desk_and_props(C):
     rnd = random.Random(11)
-    wood = mat("M_WarmWood", (0.46, 0.25, 0.11))
-    wood_dark = mat("M_WarmWoodDark", (0.30, 0.15, 0.07))
+    wood = mat("M_WarmWood", (0.20, 0.10, 0.045))          # dark brown desk (reference)
+    wood_dark = mat("M_WarmWoodDark", (0.11, 0.055, 0.025))
     DESK_Z = 0.75
 
     # Desk --------------------------------------------------------------
@@ -269,7 +269,7 @@ def build_desk_and_props(C):
 
     # Ceramic mug ---------------------------------------------------------
     ceramic = mat("M_WhiteCeramic", (0.92, 0.90, 0.86))
-    mug = empty("Mug", C, loc=(0.52, -0.12, DESK_Z), rot=(0, 0, -35))
+    mug = empty("Mug", C, loc=(-0.10, -0.14, DESK_Z), rot=(0, 0, -35))
     obj("Mug_Body", [cyl((0, 0, 0.05), 0.042, 0.042, 0.10, seg=12),
                      box((0.056, 0, 0.078), (0.030, 0.012, 0.010)),
                      box((0.056, 0, 0.027), (0.030, 0.012, 0.010)),
@@ -277,14 +277,11 @@ def build_desk_and_props(C):
     obj("Mug_Coffee", [cyl((0, 0, 0.1005), 0.036, 0.036, 0.002, seg=12)],
         mat("M_Coffee", (0.18, 0.09, 0.05)), C, mug)
 
-    # Sticky-note stack ----------------------------------------------------
-    notes = empty("StickyNotes", C, loc=(-0.20, -0.20, DESK_Z), rot=(0, 0, 12))
-    note_mats = [mat("M_NoteYellow", (1.0, 0.85, 0.30)), mat("M_NotePink", (1.0, 0.52, 0.66))]
-    for i in range(5):
-        obj(f"StickyNote_{i + 1}", [box((0, 0, 0.002 + i * 0.0045), (0.075, 0.075, 0.004))],
-            note_mats[i % 2], C, notes, rot=(0, 0, rnd.uniform(-9, 9)))
-    obj("StickyNote_Scribble", [box((0, 0.012 - j * 0.014, 0.0245), (0.045 - j * 0.01, 0.004, 0.001))
-                                for j in range(3)], mat("M_Ink", (0.15, 0.12, 0.25)), C, notes)
+    # White paper with an orange sticky note (reference) -----------------------
+    notes = empty("StickyNotes", C, loc=(-0.06, -0.27, DESK_Z), rot=(0, 0, 6))
+    obj("Desk_Paper", [box((0, 0, 0.0015), (0.16, 0.11, 0.003))], mat("M_Paper", (0.85, 0.84, 0.80)), C, notes)
+    obj("StickyNote_Orange", [box((0.10, -0.03, 0.0035), (0.065, 0.065, 0.004))],
+        mat("M_NoteOrange", (1.0, 0.42, 0.10)), C, notes, rot=(0, 0, -10))
 
     # Potted plant (far left) ------------------------------------------------
     plant = empty("Plant", C, loc=(-0.72, 0.12, DESK_Z))
@@ -338,8 +335,8 @@ def build_background(C):
                          box((1.01, WY, 1.85), (0.08, 0.14, 1.80)),
                          box((0, WY, 2.71), (2.10, 0.14, 0.08)),
                          box((0, WY - 0.06, 0.99), (2.20, 0.26, 0.08)),   # sill
-                         box((0, WY, 1.85), (0.05, 0.10, 1.80)),          # mullion
-                         box((0, WY, 1.95), (2.02, 0.10, 0.05))],         # transom
+                         box((0, WY, 1.85), (0.09, 0.10, 1.80)),          # mullion (thick, reference)
+                         box((0, WY, 1.95), (2.02, 0.10, 0.08))],         # transom
         frame, C)
 
     # Twilight sky, moon, stars
@@ -349,11 +346,7 @@ def build_background(C):
                  "visible_volume_scatter", "visible_shadow"):
         if hasattr(sky, attr):
             setattr(sky, attr, False)
-    obj("Moon", [ico((1.25, 5.9, 3.45), 0.30, sub=1)],
-        mat("M_Moon", (1.0, 0.93, 0.86), emit=3.0), C)
-    stars = [box((rnd.uniform(-2.6, 2.6), 5.95, rnd.uniform(2.9, 4.3)), (0.025,) * 3)
-             for _ in range(28)]
-    obj("Stars", stars, mat("M_Stars", (1.0, 0.95, 1.0), emit=4.0), C)
+    # (no moon or stars: dusk sky like the reference)
 
     # City silhouettes: far (hazy, taller) and near (darker) layers
     def city_layer(tag, y_range, top_range, color, win_size, win_pitch, lit_p, win_emit):
@@ -393,8 +386,8 @@ def build_background(C):
 
     city_layer("Far", (4.6, 5.3), (1.2, 2.7), (0.10, 0.06, 0.17),
                (0.03, 0.045), (0.075, 0.10), 0.20, 2.5)
-    city_layer("Near", (2.6, 3.4), (0.85, 1.9), (0.035, 0.028, 0.065),
-               (0.045, 0.07), (0.11, 0.14), 0.28, 4.0)
+    city_layer("Near", (2.0, 2.5), (1.5, 2.7), (0.03, 0.022, 0.05),       # big close blocks (reference)
+               (0.06, 0.09), (0.16, 0.20), 0.14, 4.0)
 
 
 def build_characters(C):
