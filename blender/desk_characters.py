@@ -352,8 +352,12 @@ def build_human(C):
                                     ico((-0.075, -0.125, 1.08), 0.07, sub=2, scale=(0.75, 0.45, 1.25), rot=(10, 22, 0)),
                                     ico((0, 0.04, 1.13), 0.13, sub=2, scale=(1.05, 0.65, 0.4))],
             cloth, C, root)
-        obj("Human_Outfit_Tee", [ico((0, -0.12, 1.04), 0.08, sub=2, scale=(1.15, 0.45, 1.25))],
-            mat("M_Char_Tee", (0.025, 0.025, 0.03)), C, root)
+        # Puffy rolled jacket collar around the neck (no inner shirt blob): a soft
+        # ring in a slightly deeper shade, with the lapels meeting below it
+        obj("Human_Outfit_TeeCollar", [torus((0, -0.015, 1.105), 0.078, 0.032, rot=(-12, 0, 0), seg=20, mseg=8)],
+            cloth_dark, C, root)
+        obj("Human_Outfit_Zip", [box((0, -0.168, 0.99), (0.008, 0.012, 0.17))],
+            mat("M_Char_Zip", (0.55, 0.50, 0.62)), C, root)
     elif OUTFIT == "jacket":
         obj("Human_Outfit_Collar", [box((0.065, -0.10, 1.11), (0.085, 0.025, 0.07), rot=(20, 0, -25)),
                                     box((-0.065, -0.10, 1.11), (0.085, 0.025, 0.07), rot=(20, 0, 25)),
@@ -369,7 +373,7 @@ def build_human(C):
             cloth_dark, C, root)
 
     # Neck + big rounded head
-    neck_m = mat("M_Char_TeeNeck", (0.025, 0.025, 0.03)) if OUTFIT in ("yellow", "lavender") else skin
+    neck_m = skin                                   # bare neck above the crew-neck collar
     obj("Human_Neck", [cyl((0, 0, 1.13), 0.05, 0.05, 0.07, seg=6)], neck_m, C, root)
     head_mesh = obj("Human_HeadMesh", [ico((0, 0, HZ), 0.20, sub=3 if STYLE == "chibi" else 2, scale=(1.0, 0.92, 1.03)),   # slightly oval: adult chin
                            ico((0.198, 0.0, HZ - 0.01), 0.03, sub=1, scale=(0.5, 1, 1)),   # ears
