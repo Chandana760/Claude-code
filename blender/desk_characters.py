@@ -494,10 +494,15 @@ def hex_linear(h):
     return tuple(ch(int(h[i:i + 2], 16)) for i in (1, 3, 5))
 
 
-def hex_mat(name, hex_color, roughness, subsurface=0.0):
+def hex_mat(name, hex_color, roughness, subsurface=0.0, specular=None):
     m = mat(name, hex_linear(hex_color))
     bsdf = _principled(m)
     bsdf.inputs["Roughness"].default_value = roughness
+    if specular is not None:
+        for n in ("Specular IOR Level", "Specular"):
+            if n in bsdf.inputs:
+                bsdf.inputs[n].default_value = specular
+                break
     if subsurface:
         for n in ("Subsurface Weight", "Subsurface"):
             if n in bsdf.inputs:
@@ -509,7 +514,7 @@ def hex_mat(name, hex_color, roughness, subsurface=0.0):
 
 
 CLAUDE_HEIGHT = 0.24          # metres on the desk, bottom of feet to top lobe
-CLAUDE_DECIMATE = 0.07        # COLLAPSE ratio (spec: 0.06-0.08)
+CLAUDE_TARGET_FACES = 210     # COLLAPSE decimate target: bold facets (180-240 faces)
 CLAUDE_MB_RESOLUTION = 0.035  # metaball resolution before decimating (spec said 0.08)
 
 
@@ -524,7 +529,7 @@ def build_claude_mascot(C, parent):
     triangular facets (no voxel remesh), tucked feet, flush vertical eyes.
     Built in design units (body ~1.2 tall), then scaled to desk size with the
     origin (0, 0, 0) at the bottom of the feet."""
-    body_m = hex_mat("M_Claude_Body", "#E86A33", 0.85)
+    body_m = hex_mat("M_Claude_Body", "#D9531E", 0.85, specular=0.2)   # rich burnt coral
     eye_m = hex_mat("M_Claude_Eyes", "#080808", 0.9)
 
     # 1. Smooth star body: metaball, 6 balls on the X-Z plane -----------------
@@ -556,8 +561,18 @@ def build_claude_mascot(C, parent):
     tmp = bpy.data.objects.new("Claude_DecimateTmp", raw)
     C.objects.link(tmp)
     dc = tmp.modifiers.new("Facets", "DECIMATE")
-    dc.decimate_type, dc.ratio = "COLLAPSE", CLAUDE_DECIMATE
-    body_me = _evaluated_mesh(tmp)
+    dc.decimate_type = "COLLAPSE"
+    # Collapse works on triangles: aim the ratio at the target face count,
+    # then correct it once or twice from the actual result (applied below).
+    dc.ratio = CLAUDE_TARGET_FACES / (2.0 * len(raw.polygons))
+    for _ in range(3):
+        body_me = _evaluated_mesh(tmp)
+        n = len(body_me.polygons)
+        if 180 <= n <= 240:
+            break
+        dc.ratio *= CLAUDE_TARGET_FACES / max(n, 1)
+        bpy.data.meshes.remove(body_me)
+    print(f"Claude mascot: {len(body_me.polygons)} faces (decimate ratio {dc.ratio:.4f})")
     bpy.data.objects.remove(tmp, do_unlink=True)
     bpy.data.meshes.remove(raw)
 
@@ -754,11 +769,46 @@ def demo_animation(mouth_keys, lid_keys, mascot_root):
                             (193, 0.0), (196, 0.6), (198, -0.5), (200, 0.0), (204, 0.6), (207, 0.0)])
 
 
+def add_mascot_rim_light():
+    """Warm #FF8C42 area light from the mascot's upper-right-back at 45 deg, so
+    each facet has a lit side and a crisp shadow side."""
+    old = bpy.data.objects.get("Rim_MascotWarm")
+    if old:
+        bpy.data.objects.remove(old, do_unlink=True)
+    ld = bpy.data.lights.get("Rim_MascotWarm") or bpy.data.lights.new("Rim_MascotWarm", "AREA")
+    ld.color = hex_linear("#FF8C42")
+    ld.energy = 150
+    ld.size = 0.12                       # small source = crisp facet shadows
+    ob = bpy.data.objects.new("Rim_MascotWarm", ld)
+    coll = bpy.data.collections.get("Lighting") or bpy.context.scene.collection
+    coll.objects.link(ob)
+    target = Vector(MASCOT_POS) + Vector((0, 0, 0.12))
+    # 45 deg elevation, coming from behind-right (+x, +y) of the mascot
+    d = Vector((math.cos(R(45)), math.sin(R(45)), 0)) * math.cos(R(45))
+    d.z = math.sin(R(45))
+    ob.location = target + d * 0.55
+    ob.rotation_euler = (target - ob.location).to_track_quat("-Z", "Y").to_euler()
+    if hasattr(ob, "visible_camera"):
+        ob.visible_camera = False
+    # Light linking: this rim light only reaches the mascot, so the desk and
+    # the character behind it don't get washed out.
+    if hasattr(ob, "light_linking"):
+        recv = bpy.data.collections.get("Mascot_RimReceivers") or bpy.data.collections.new("Mascot_RimReceivers")
+        for o in list(recv.objects):
+            recv.objects.unlink(o)
+        for name in ("Mascot_Body", "Mascot_Feet", "Mascot_Eyes"):
+            o = bpy.data.objects.get(name)
+            if o:
+                recv.objects.link(o)
+        ob.light_linking.receiver_collection = recv
+
+
 def main():
     C = remove_old_characters()
     _, human_focus, mouth_keys, lid_keys = build_human(C)
     mascot_root, mascot_focus = build_mascot(C)
     retarget_cameras(human_focus, mascot_focus)
+    add_mascot_rim_light()
     if DEMO_ANIMATION:
         demo_animation(mouth_keys, lid_keys, mascot_root)
     bpy.context.view_layer.update()

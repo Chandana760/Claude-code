@@ -469,9 +469,9 @@ def build_lights(C, lamp_pos):
         aim(ob, target)
         return ob
 
-    area("Key_DeskWarm", (0.95, -1.10, 1.80), (0.15, 0.25, 0.95), (1.0, 0.50, 0.20), 260, 1.0)
+    area("Key_DeskWarm", (0.95, -1.10, 1.80), (0.15, 0.25, 0.95), (1.0, 0.50, 0.20), 156, 1.0)   # 260 -40%: front-facing
     area("Rim_WindowPurple", (0.10, 1.22, 2.00), (0.35, 0.50, 1.20), (0.62, 0.38, 1.0), 220, 1.6, 1.0)
-    area("Fill_MonitorGlow", (-0.30, -0.10, 1.00), (0.20, 0.30, 1.10), (0.45, 0.60, 1.0), 8, 0.4)
+    area("Fill_MonitorGlow", (-0.30, -0.10, 1.00), (0.20, 0.30, 1.10), (0.45, 0.60, 1.0), 4.8, 0.4)   # 8 -40%: front fill
 
     pd = bpy.data.lights.new("Practical_DeskLamp", "POINT")
     pd.color, pd.energy, pd.shadow_soft_size = (1.0, 0.55, 0.25), 45, 0.05
