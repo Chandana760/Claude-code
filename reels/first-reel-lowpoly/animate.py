@@ -209,7 +209,7 @@ def style_for_episode():
     if m:
         bsdf = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
         bsdf.inputs["Base Color"].default_value = (0.07, 0.015, 0.02, 1)
-    cams = {"Cam_Human": ((0.26, -0.68, 1.42), (0.45, 0.45, 1.20), 50, 1.6),
+    cams = {"Cam_Human": ((0.24, -0.74, 1.36), (0.45, 0.45, 1.12), 42, 1.6),
             "Cam_Mascot": ((0.06, -1.02, 0.98), (0.14, -0.20, 0.89), 45, 1.6)}
     for name, (loc, tgt, lens, fstop) in cams.items():
         cam = bpy.data.objects[name]
@@ -263,6 +263,16 @@ def animate():
     root = bpy.data.objects["Mascot_Root"]
     root_rz = root.rotation_euler.z
     eyes = bpy.data.objects["Mascot_Eyes"]
+
+    # Dot-eye face: blinks squash the dots into lines (pupils scaled about their centre)
+    pupils = bpy.data.objects["Human_Pupils"]
+    dot_eyes = bpy.data.objects["Human_EyeWhites"].hide_render
+    if dot_eyes:
+        pm = pupils.data
+        pc = sum((v.co for v in pm.vertices), Vector()) / len(pm.vertices)
+        for v in pm.vertices:
+            v.co -= pc
+        pupils.location = pupils.location + pc
 
     # Re-centre the mascot eyes' origin so they squint/blink in place
     me = eyes.data
@@ -358,6 +368,9 @@ def animate():
         mouth["Smile"].keyframe_insert("value", frame=f)
         lids["Blink"].value = clamp(lid)
         lids["Blink"].keyframe_insert("value", frame=f)
+        if dot_eyes:
+            pupils.scale = (1.0, 1.0, 1.0 - 0.85 * clamp(lid))
+            pupils.keyframe_insert("scale", index=2, frame=f)
         brows.location = brow_base + Vector((0, 0, brow_dz))
         brows.keyframe_insert("location", index=2, frame=f)
         head.rotation_euler = (hx, hy, hz)

@@ -537,7 +537,7 @@ def setup_render(cams):
     try:
         sc.view_settings.view_transform = "AgX"
         sc.view_settings.look = "AgX - Punchy"
-        sc.view_settings.exposure = -1.0
+        sc.view_settings.exposure = -1.4         # moody night, like the reference
     except TypeError:
         pass
 

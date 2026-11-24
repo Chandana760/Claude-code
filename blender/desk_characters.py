@@ -29,8 +29,9 @@ from mathutils import Euler, Matrix, Vector
 
 # ----------------------------- variant switches ----------------------------- #
 HAIR = "bob"            # "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
-GLASSES = "round"       # "round"  = thin round frames       | "rect" = chunky rectangular frames
-OUTFIT = "hoodie"       # "hoodie" = cobalt blue hoodie | "jacket" = olive utility jacket | "sweater" = burnt orange sweater
+GLASSES = "big"         # "big" = large thin black round (reference) | "round" = thin round | "rect" = chunky rectangular
+FACE = "dots"            # "dots" = small black dot eyes with a glint (reference) | "ovals" = white eyes, lids, lashes, brows
+OUTFIT = "yellow"       # "yellow" = puffy yellow jacket + dark tee (reference) | "hoodie" = cobalt hoodie | "jacket" = olive jacket | "sweater" = burnt orange
 MASCOT_SHAPE = "claude"  # "claude" = orange lobed Claude blob | "robot" = round robot cube | "fox" = crystal fox | "cactus" = geometric cactus
 MASCOT_COLOR = "orange"  # "orange" (Claude) | "mint" | "coral" | "yellow"
 DEMO_ANIMATION = True   # blinks + talk on the Cam_Human shot, hop/tilt on the Cam_Mascot shot
@@ -214,19 +215,20 @@ def remove_old_characters():
 OUTFITS = {
     "hoodie": (0.06, 0.20, 0.78),    # cobalt blue
     "jacket": (0.33, 0.38, 0.17),    # olive green
+    "yellow": (0.88, 0.58, 0.0),     # lemon-golden yellow (reads yellow under the warm key)
     "sweater": (0.80, 0.33, 0.10),   # burnt orange
 }
 
 
 def build_human(C):
     rnd = random.Random(5)
-    skin = mat("M_Char_Skin", (0.88, 0.64, 0.50))
+    skin = mat("M_Char_Skin", (0.90, 0.56, 0.42))
     cloth = mat("M_Char_Outfit", OUTFITS[OUTFIT])
     cloth_dark = mat("M_Char_OutfitTrim", tuple(c * 0.7 for c in OUTFITS[OUTFIT]))
     hair = mat("M_Char_Hair", (0.022, 0.014, 0.012))
     ink = mat("M_Char_FaceInk", (0.03, 0.03, 0.04))
     white = mat("M_Char_EyeWhite", (0.95, 0.95, 0.93))
-    frame_col = (0.06, 0.05, 0.07) if GLASSES == "round" else (0.12, 0.06, 0.05)
+    frame_col = {"big": (0.008, 0.008, 0.01), "round": (0.06, 0.05, 0.07)}.get(GLASSES, (0.12, 0.06, 0.05))
     frames = mat("M_Char_Glasses", frame_col)
 
     root = empty("Human_Root", C, loc=HUMAN_POS, rot=(0, 0, HUMAN_ROT_Z), size=0.25, shape="CIRCLE")
@@ -263,6 +265,15 @@ def build_human(C):
         obj("Human_Outfit_Strings", [cyl_between((0.04, -0.15, 1.10), (0.05, -0.19, 0.98), 0.006, 5),
                                      cyl_between((-0.04, -0.15, 1.10), (-0.05, -0.19, 0.98), 0.006, 5)],
             mat("M_Char_Strings", (0.92, 0.92, 0.90)), C, root)
+    elif OUTFIT == "yellow":                 # reference: puffy yellow jacket, dark tee in a V
+        obj("Human_Outfit_Collar", [box((0.075, -0.105, 1.10), (0.09, 0.035, 0.09), rot=(18, 0, -28)),
+                                    box((-0.075, -0.105, 1.10), (0.09, 0.035, 0.09), rot=(18, 0, 28)),
+                                    box((0.08, -0.155, 0.98), (0.05, 0.03, 0.22), rot=(0, -6, 0)),    # lapels
+                                    box((-0.08, -0.155, 0.98), (0.05, 0.03, 0.22), rot=(0, 6, 0)),
+                                    cyl((0, 0.03, 1.125), 0.115, 0.10, 0.05, seg=10)],
+            cloth, C, root)
+        obj("Human_Outfit_Tee", [box((0, -0.15, 1.0), (0.12, 0.02, 0.24))],
+            mat("M_Char_Tee", (0.025, 0.025, 0.03)), C, root)
     elif OUTFIT == "jacket":
         obj("Human_Outfit_Collar", [box((0.065, -0.10, 1.11), (0.085, 0.025, 0.07), rot=(20, 0, -25)),
                                     box((-0.065, -0.10, 1.11), (0.085, 0.025, 0.07), rot=(20, 0, 25)),
@@ -278,18 +289,36 @@ def build_human(C):
             cloth_dark, C, root)
 
     # Neck + big rounded head
-    obj("Human_Neck", [cyl((0, 0, 1.13), 0.05, 0.05, 0.07, seg=6)], skin, C, root)
+    neck_m = mat("M_Char_TeeNeck", (0.025, 0.025, 0.03)) if OUTFIT == "yellow" else skin
+    obj("Human_Neck", [cyl((0, 0, 1.13), 0.05, 0.05, 0.07, seg=6)], neck_m, C, root)
     obj("Human_HeadMesh", [ico((0, 0, HZ), 0.20, sub=2, scale=(1.0, 0.92, 0.95)),
                            ico((0.198, 0.0, HZ - 0.01), 0.03, sub=1, scale=(0.5, 1, 1)),   # ears
                            ico((-0.198, 0.0, HZ - 0.01), 0.03, sub=1, scale=(0.5, 1, 1)),
-                           ico((0, -0.183, HZ - 0.035), 0.016, sub=1)],                   # nose
+                           ico((0, -0.181, HZ - 0.035), 0.016 if FACE != "dots" else 0.011, sub=1)],  # nose
         skin, C, **hp)
 
     # Eyes: white ovals + black pupils
     obj("Human_EyeWhites", [ico((x, -0.172, HZ), 0.035, sub=2, scale=(0.8, 0.35, 1.1)) for x in (0.07, -0.07)],
         white, C, **hp)
-    obj("Human_Pupils", [ico((x * 0.97, -0.186, HZ - 0.004), 0.016, sub=2, scale=(0.8, 0.4, 1.1))
-                         for x in (0.07, -0.07)], ink, C, **hp)
+    if FACE == "dots":
+        # Reference style: small black dot eyes, each with a tiny white glint
+        def glint(loc):
+            mtx = Matrix.LocRotScale(Vector(loc), None, Vector((1.0, 0.5, 1.0)))
+
+            def b(bm):
+                vs = bmesh.ops.create_icosphere(bm, subdivisions=1, radius=0.0055, matrix=mtx)["verts"]
+                for fc in {fc for v in vs for fc in v.link_faces}:
+                    fc.material_index = 1
+            return b
+        parts = []
+        for x in (0.072, -0.072):
+            parts.append(ico((x, -0.172, HZ - 0.008), 0.019, sub=2, scale=(0.8, 0.35, 1.05)))
+            parts.append(glint((x + 0.006, -0.1795, HZ - 0.001)))
+        pupils = obj("Human_Pupils", parts, ink, C, **hp)
+        pupils.data.materials.append(mat("M_Char_EyeGlint", (1.0, 1.0, 1.0), emit=2.0))
+    else:
+        obj("Human_Pupils", [ico((x * 0.97, -0.186, HZ - 0.004), 0.016, sub=2, scale=(0.8, 0.4, 1.1))
+                             for x in (0.07, -0.07)], ink, C, **hp)
 
     # Eyelids (shape keys: Open / Blink): curved skin lids that follow the eye
     # outline, plus a lash line on the lid edge that is driven by Blink.
@@ -392,7 +421,11 @@ def build_human(C):
     mouth_keys = add_shape_keys(mouth, "Closed", {"Talk_Open": talk, "Smile": smile})
 
     # Glasses
-    if GLASSES == "round":
+    if GLASSES == "big":                     # large thin black round frames (reference)
+        parts = [torus((x, -0.212, HZ - 0.006), 0.08, 0.0028, seg=24) for x in (0.088, -0.088)]
+        parts.append(cyl_between((-0.009, -0.214, HZ + 0.004), (0.009, -0.214, HZ + 0.004), 0.0028, 5))
+        side_x = 0.168
+    elif GLASSES == "round":
         parts = [torus((x, -0.215, HZ), 0.055, 0.0045) for x in (0.075, -0.075)]
         parts.append(cyl_between((-0.022, -0.215, HZ + 0.01), (0.022, -0.215, HZ + 0.01), 0.004, 5))
         side_x = 0.13
@@ -435,7 +468,7 @@ def build_human(C):
 
         for i in range(9):                                   # behind the ears + back only
             ang = 10 + i * 20
-            hair_parts.append(strand(ang, 0.215, 0.19 + 0.012 * math.sin(i * 1.7),
+            hair_parts.append(strand(ang, 0.215, 0.26 + 0.015 * math.sin(i * 1.7),
                                      0.085, tilt_out=9 + 3 * math.cos(i), drop=-0.01))
         hair_parts += [ico((-0.03, -0.15, HZ + 0.118), 0.11, sub=2, scale=(1.5, 0.36, 0.52), rot=(0, 16, 0)),
                        ico((0.12, -0.125, HZ + 0.09), 0.065, sub=2, scale=(1.0, 0.45, 0.85), rot=(0, 30, 0))]
@@ -479,6 +512,11 @@ def build_human(C):
     obj("Human_Hair", hair_parts, hair, C, **hp)
 
     focus = empty("Human_FocusTarget", C, head, loc=(0, -0.18, 0), size=0.03)
+    if FACE == "dots":     # reference face: no eye whites, lids, lashes, blush or brows
+        for name in ("Human_EyeWhites", "Human_Eyelids", "Human_Lashes", "Human_Blush", "Human_Eyebrows"):
+            o = bpy.data.objects.get(name)
+            if o:
+                o.hide_render = o.hide_viewport = True
     return root, focus, mouth_keys, lid_keys
 
 
