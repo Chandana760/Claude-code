@@ -48,3 +48,35 @@ Day and rain variants are the next two to add.
 4. Mix music with `gen_audio.py`, then sidechain it under the dialogue to make `mix.wav`.
 5. Run `captions.py`, then `assemble.py frames out.mp4`.
 6. Make the cover with `cover.py frame.jpg "DAILY LIFE · EP 1" "Inbox *zero.*" cover.jpg`.
+
+
+## Standard set and characters (default for every episode)
+Every episode reuses this setup unless the episode says otherwise. It is built by
+`blender/cozy_desk_studio.py` (set) and `blender/desk_characters.py` (characters).
+
+| Part | Default |
+|---|---|
+| Window | Big window with thick black frame bars; pink-magenta-to-purple sunset with an orange glow; close dark city blocks with a few lit windows; no moon or stars |
+| Desk | Dark brown wood; monitor with code on the left; white mug; white paper with an orange sticky note; keyboard; small lamp on the right |
+| Maya | Chibi head (smooth), dot eyes with glints, big thin black round glasses, sleek near-black straight hair with a fringe, lavender jacket open over a dark tee (`NECKLINE = "open"`), arms crossed on the desk |
+| Claude | Wide, flat orange (#D9531E) beveled-cube mascot, tall black eyes, stubby feet; hops at line starts, slight vibration while talking, eyes flex and blink to squares |
+| Shots | `maya` close-up with headroom for captions, `claude` close-up with Maya still and blurred behind, `wide` desk shot with the monitor in frame |
+| Captions | Small white bold text in a dark pill, high in frame (over the window, never on a face) |
+| Audio | Voices + soft piano bed only (`idea-reel/soft_music.py`): no caption pops, drums or crackle; every line levelled to the same loudness; tight gaps, no dead air |
+
+### Changing the set for one episode
+Set changes live in the build scripts, so an episode that needs a different look should
+pass its own values rather than editing the defaults:
+- Sky/time of day: the colour stops in `sky_mat()` (`cozy_desk_studio.py`).
+- Props: the `build_desk_and_props()` section (mug, paper and note, plant, lamp).
+- Outfit: `OUTFIT` / `NECKLINE` switches in `desk_characters.py`.
+- Shots: the `cams` table in `first-reel-lowpoly/style_for_episode()`.
+Keep the defaults as above and note any per-episode change in that episode's `script.py`.
+
+### Making an episode
+1. `mkdir reels/<episode>`; write `script.py` (who, text with ElevenLabs v3 tags, shot, acting, pause, optional cut-off length).
+2. `python3 ../idea-reel/voices.py` (levelled voices) -> `lines.json`, `dialogue.wav`.
+3. `python3 ../idea-reel/soft_music.py <duration>`, then duck it under the dialogue into `mix.wav` (see `idea-reel`).
+4. `python3 ../first-reel-lowpoly/animate.py -- --ep . --blend episode.blend`
+5. `python3 ../first-reel-lowpoly/animate.py -- --ep . --frames frames --step 2` (render; resumable)
+6. `python3 ../first-reel-lowpoly/make_reel.py frames <out.mp4> .`
