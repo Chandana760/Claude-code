@@ -288,7 +288,8 @@ def build_human(C):
         _sb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
     cloth = mat("M_Char_Outfit", OUTFITS[OUTFIT])
     cloth_dark = mat("M_Char_OutfitTrim", tuple(c * 0.7 for c in OUTFITS[OUTFIT]))
-    hair = mat("M_Char_Hair", (0.022, 0.014, 0.012))
+    hair = mat("M_Char_Hair", (0.012, 0.008, 0.007))      # near-black brown
+    _principled(hair).inputs["Roughness"].default_value = 0.5   # soft sheen on the strands
     ink = mat("M_Char_FaceInk", (0.03, 0.03, 0.04))
     white = mat("M_Char_EyeWhite", (0.95, 0.95, 0.93))
     frame_col = {"big": (0.008, 0.008, 0.01), "round": (0.06, 0.05, 0.07)}.get(GLASSES, (0.12, 0.06, 0.05))
@@ -531,7 +532,7 @@ def build_human(C):
         # over the head and hang behind to the shoulders; a swept fringe of locks
         # across the forehead and two locks framing the face to chin level.
         hc = Vector((0, 0.02, HZ + 0.01))
-        hr = 0.228
+        hr = 0.242                                           # volume: locks sit off the head
 
         def on_head(d):
             d = Vector(d).normalized()
@@ -544,14 +545,15 @@ def build_human(C):
         part = (-0.32, -0.12, 1.0)                           # side part, her right
         hair_parts = [ico((0, 0.03, HZ + 0.03), 0.222, sub=2, scale=(1.06, 1.0, 0.94),
                           cut=lambda co: co.y < -0.05 and co.z < HZ + 0.07)]
-        for i in range(20):                                  # over the head, then down the back
-            az = math.radians(-25 + i * (230 / 19))          # side -> back -> other side
+        for i in range(28):                                  # over the head, then down the back
+            az = math.radians(-25 + i * (230 / 27))          # side -> back -> other side
             end = (math.cos(az), math.sin(az), -0.15)
-            pts = path(part, end)
-            out = Vector((math.cos(az), math.sin(az), 0)) * 0.02
+            root_dir = (-0.30, -0.22 + 0.50 * (i / 27), 1.0)   # roots spread along a part line, not one point
+            pts = path(root_dir, end)
+            out = Vector((math.cos(az), math.sin(az), 0)) * 0.04
             base = pts[-1]
-            pts += [base + out * (k / 3) + Vector((0, 0, -0.09 * k)) for k in (1, 2, 3)]
-            hair_parts += hair_lock(pts, 0.034, 0.016, normal_from=hc)
+            pts += [base + out * (k / 4) + Vector((0, 0, -0.085 * k)) for k in (1, 2, 3, 4)]
+            hair_parts += hair_lock(pts, 0.042, 0.02, normal_from=hc, flat=(2.2, 0.5))
         # Side-swept fringe: from the part, diagonally across the forehead and
         # down past her left temple (an adult swoop, not a straight-cut bang)
         for az_deg, el, w in ((-105, 0.62, 0.036), (-90, 0.50, 0.038), (-72, 0.38, 0.038),
@@ -563,8 +565,8 @@ def build_human(C):
             c, sn = math.cos(az), math.sin(az)
             pts = path((c * 0.6, sn * 0.6, 0.8), (c, sn, -0.2), 6)
             out = Vector((c, sn, 0)) * 0.012
-            pts += [pts[-1] + out * k + Vector((0, 0.004 * k, -0.06 * k)) for k in (1, 2, 3)]
-            hair_parts += hair_lock(pts, 0.032, 0.014, normal_from=hc, flat=(2.0, 0.45))
+            pts += [pts[-1] + out * k + Vector((0, 0.006 * k, -0.07 * k)) for k in (1, 2, 3, 4)]
+            hair_parts += hair_lock(pts, 0.038, 0.016, normal_from=hc, flat=(2.2, 0.45))
     elif HAIR == "bob":
         # Shoulder-length bob ("lob"): top cap, then a ring of chunky faceted
         # strands hanging from the crown around the sides and back, two longer
