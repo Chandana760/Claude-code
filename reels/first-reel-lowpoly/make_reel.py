@@ -1,6 +1,6 @@
 """Caption pills + frames (rendered on twos) + voices/music -> 1080x1920 phone-ready MP4.
 
-Usage: python3 make_reel.py [frames_dir] [out.mp4]
+Usage: python3 make_reel.py [frames_dir] [out.mp4] [episode_dir]
 Reads ../first-reel/lines.json (caption text + timing) and ../first-reel/mix.wav (voices + music).
 """
 import glob
@@ -13,14 +13,14 @@ import tempfile
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-EP_DIR = os.path.normpath(os.path.join(HERE, "..", "first-reel"))
+EP_DIR = os.path.abspath(sys.argv[3]) if len(sys.argv) > 3 else os.path.normpath(os.path.join(HERE, "..", "first-reel"))
 FRAMES = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "frames")
 OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "first-reel-lowpoly.mp4")
 W, H = 1080, 1920
 FONT = ImageFont.truetype("/usr/share/fonts/opentype/inter/Inter-Bold.otf", 40)
 
 lines = json.load(open(os.path.join(EP_DIR, "lines.json")))["lines"]
-cap_dir = os.path.join(HERE, "captions")
+cap_dir = os.path.join(EP_DIR, "captions")
 os.makedirs(cap_dir, exist_ok=True)
 
 

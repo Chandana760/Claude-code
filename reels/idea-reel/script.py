@@ -1,0 +1,23 @@
+"""Daily life: "Is my idea bad?". who, text with ElevenLabs v3 tags, shot (maya|claude|wide),
+acting (Maya: worried|flat|surprised|thinking|wink, Claude: bounce|look-away|squint|tilt|excited), pause before (s)."""
+SCRIPT = [
+  ('M', '[nervous] Claude, be honest. [pause] Is my idea bad?', 'maya', 'worried', 0.5),
+  ('C', "[cheerful] It's a great idea.", 'claude', 'bounce', 0.6),
+  ('M', "[flatly] I haven't told you the idea.", 'maya', 'flat', 0.7),
+  ('C', '[pause] It sounds great so far.', 'claude', 'look-away', 0.9),
+  ('M', '[hopeful] An AI tool that creates Instagram posts for businesses.', 'maya', 'thinking', 0.8),
+  ('C', '[enthusiastic] Brilliant. Visionary. [pause] There are four thousand of those. [cheerful] Yours would be the best one.', 'claude', 'excited', 0.8),
+  ('M', '[deadpan] I made that up to test you.', 'wide', 'flat', 0.9),
+  ('C', '[long pause] It was a great test.', 'claude', 'squint', 1.0),
+  ('M', '[sighs] Okay, the real one. [pause] I want to start my own digital marketing agency.', 'maya', 'thinking', 1.0),
+  ('C', "[excited] That's—", 'claude', 'bounce', 0.6),
+  ('M', "[quickly] Don't say great.", 'maya', 'surprised', 0.12),
+  ('C', "[long pause] [seriously] It's risky. No clients. No steady income. [softly] You'd be scared most days.", 'claude', 'tilt', 1.0),
+  ('M', '[softly] Thank you.', 'maya', 'flat', 1.1),
+  ('C', '[confused] For that?', 'claude', 'squint', 0.6),
+  ('M', "[quietly] Everyone says I'll be successful. [pause] Nobody means it.", 'maya', 'worried', 0.7),
+  ('C', "[warmly] I also think you'd be good at it.", 'wide', 'tilt', 0.9),
+  ('M', '[pause] Now I believe you.', 'maya', 'wink', 1.0),
+  ('C', "[cheerful] It's a great idea.", 'claude', 'bounce', 0.8),
+  ('M', "[deadpan] Don't push it.", 'wide', 'flat', 0.7),
+]

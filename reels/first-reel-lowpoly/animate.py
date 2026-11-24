@@ -11,8 +11,9 @@ acting tags and per-frame loudness envelopes):
   * Claude mascot: squash/stretch + wobble with its voice, hop / tilt / look-away /
     squint / excited per acting tag, idle breathing, eye blinks
 
-Usage (bpy as a Python module, or Blender's own python):
-  python3 animate.py -- --blend episode.blend
+Usage (bpy as a Python module, or Blender's own python); --ep picks the episode folder
+(lines.json, dialogue.wav, mix.wav; default ../first-reel):
+  python3 animate.py -- --ep ../idea-reel --blend episode.blend
   python3 animate.py -- --frames frames --step 2 [--start 1 --end 400] [--res 720x1280 --samples 16]
 Rendering skips frames that already exist, so it can be resumed in chunks.
 """
@@ -27,7 +28,9 @@ from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BLENDER_DIR = os.path.normpath(os.path.join(HERE, "..", "..", "blender"))
-EP_DIR = os.path.normpath(os.path.join(HERE, "..", "first-reel"))
+_argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+EP_DIR = os.path.abspath(_argv[_argv.index("--ep") + 1]) if "--ep" in _argv else \
+    os.path.normpath(os.path.join(HERE, "..", "first-reel"))
 
 
 def arg(name, default=None):
@@ -52,7 +55,9 @@ def build():
 EP = json.load(open(os.path.join(EP_DIR, "lines.json")))
 FPS = EP["fps"]
 LINES = EP["lines"]
-AUDIO_LEN = 53.84                              # mix.wav length (s)
+import subprocess as _sp
+AUDIO_LEN = float(_sp.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                           os.path.join(EP_DIR, "mix.wav")], capture_output=True, text=True).stdout.strip())
 LAST_FRAME = int(math.ceil(AUDIO_LEN * FPS))
 CUT_LEAD = 0.2                                 # cut to the speaker slightly before they talk
 
