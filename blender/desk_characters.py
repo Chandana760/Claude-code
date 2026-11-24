@@ -533,14 +533,11 @@ def build_claude_mascot(C, parent):
     eye_m = hex_mat("M_Claude_Eyes", "#080808", 0.9)
 
     # 1. Body parts: dimensions (X, Y, Z), centre, bevel width, 3 segments ----
-    # Spec torso was 1.15 x 0.72 (about 1.6x wider than tall); the reference is
-    # nearly square, so the torso is taller, bevels rounder, crest and side
-    # bumps larger. Same method: beveled cubes -> voxel fuse -> decimate.
-    parts = [rbox((0, 0, 0.60), (1.05, 0.68, 0.96), 0.30, 3),          # main torso
-             rbox((0, 0, 1.08), (0.52, 0.56, 0.34), 0.15, 3)]          # short flat crest
-    for x in (-0.50, 0.50):                                            # side bumps
-        for z in (0.82, 0.38):
-            parts.append(rbox((x, 0, z), (0.36, 0.56, 0.34), 0.15, 3))
+    parts = [rbox((0, 0, 0.52), (1.15, 0.68, 0.72), 0.18, 3),          # main wide torso
+             rbox((0, 0, 0.86), (0.46, 0.56, 0.32), 0.12, 3)]          # short flat crest
+    for x in (-0.54, 0.54):                                            # side bumps
+        for z in (0.66, 0.36):
+            parts.append(rbox((x, 0, z), (0.30, 0.56, 0.26), 0.10, 3))
     me = bpy.data.meshes.new("Claude_Parts")
     bm = bmesh.new()
     for build in parts:
@@ -576,7 +573,7 @@ def build_claude_mascot(C, parent):
     bpy.data.meshes.remove(fused)
 
     # 3. Tucked stubby feet: beveled low-poly cubes under the bottom edge
-    feet_parts = [rbox((x, -0.04, 0.11), (0.28, 0.38, 0.18), 0.08, 2) for x in (-0.26, 0.26)]
+    feet_parts = [rbox((x, -0.04, 0.11), (0.28, 0.38, 0.18), 0.06, 2) for x in (-0.28, 0.28)]
     foot_bottom = 0.11 - 0.09
 
     # Scale to desk size (by width); origin (0, 0, 0) at the bottom of the feet
@@ -602,7 +599,7 @@ def build_claude_mascot(C, parent):
                                 [tuple(p.vertices) for p in body_me.polygons])
     eye_parts = []
     ew, ed, eh = 0.08 * k, 0.05 * k, 0.24 * k
-    ez = (0.64 - foot_bottom) * k   # spec z 0.52 on the shorter torso
+    ez = (0.52 - foot_bottom) * k
     for ex in (-0.18 * k, 0.18 * k):
         hits = [tree.ray_cast(Vector((ex + dx, -1.0, ez + dz)), Vector((0, 1, 0)))[0]
                 for dx in (-ew / 2, 0, ew / 2) for dz in (-eh / 2, 0, eh / 2)]
