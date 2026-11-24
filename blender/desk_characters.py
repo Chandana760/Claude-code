@@ -28,7 +28,7 @@ import bpy
 from mathutils import Euler, Matrix, Vector
 
 # ----------------------------- variant switches ----------------------------- #
-HAIR = "long"           # "long" = long dark hair, middle part | "wavy" = short messy wavy | "bun" = high bun + side bangs
+HAIR = "bob"            # "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
 GLASSES = "round"       # "round"  = thin round frames       | "rect" = chunky rectangular frames
 OUTFIT = "hoodie"       # "hoodie" = cobalt blue hoodie | "jacket" = olive utility jacket | "sweater" = burnt orange sweater
 MASCOT_SHAPE = "claude"  # "claude" = orange lobed Claude blob | "robot" = round robot cube | "fox" = crystal fox | "cactus" = geometric cactus
@@ -414,7 +414,17 @@ def build_human(C):
     def face_cut(co, bottom):
         return (co.y < -0.05 and co.z < HZ + 0.09) or co.z < bottom
 
-    if HAIR == "long":
+    if HAIR == "bob":
+        # Top cap + a fuller outer shell that flares out to chin length (face
+        # opening cut away), and a side-swept fringe falling to her left.
+        hair_parts = [ico((0, 0.03, HZ + 0.04), 0.215, sub=2, scale=(1.04, 1.0, 0.9),
+                          cut=lambda co: co.y < -0.05 and co.z < HZ + 0.09),
+                      ico((0, 0.02, HZ - 0.03), 0.235, sub=2, scale=(1.12, 0.98, 1.0),
+                          cut=lambda co: co.z < HZ - 0.20
+                          or (abs(co.x) < 0.165 and co.y < -0.05 and co.z < HZ + 0.11)),
+                      ico((-0.035, -0.148, HZ + 0.115), 0.1, sub=2, scale=(1.45, 0.38, 0.5), rot=(0, 20, 0)),
+                      ico((0.11, -0.13, HZ + 0.11), 0.06, sub=2, scale=(1.1, 0.45, 0.7), rot=(0, 35, 0))]
+    elif HAIR == "long":
         # Cap with only the face cut out, a long back panel past the shoulders,
         # side curtains framing the face and a middle-parted fringe sweeping out.
         hair_parts = [ico((0, 0.03, HZ + 0.04), 0.215, sub=2, scale=(1.04, 1.0, 0.9),
@@ -458,7 +468,7 @@ def build_human(C):
 
 
 # ------------------------------ mascot -------------------------------------- #
-MASCOT_COLORS = {"orange": (0.92, 0.17, 0.02), "mint": (0.45, 0.92, 0.72), "coral": (1.0, 0.50, 0.45), "yellow": (1.0, 0.90, 0.50)}
+MASCOT_COLORS = {"orange": (0.85, 0.15, 0.02), "mint": (0.45, 0.92, 0.72), "coral": (1.0, 0.50, 0.45), "yellow": (1.0, 0.90, 0.50)}
 
 
 def build_mascot(C):
@@ -494,17 +504,17 @@ def build_mascot(C):
     if MASCOT_SHAPE == "claude":
         # Faceted orange blob: a core with seven round lobes around its edge
         # (gap at the bottom for the feet), two tall black eyes, round feet.
-        cz, ring = 0.13, 0.058
-        lobes = [ico((0, 0, cz), 0.084, sub=2, scale=(1.0, 0.8, 0.98))]
+        cz, ring = 0.128, 0.064
+        lobes = [ico((0, 0, cz), 0.092, sub=2, scale=(1.08, 0.8, 0.95))]
         for i in range(7):
-            a = R(90 + i * 360 / 7)
-            lobes.append(ico((ring * math.cos(a), 0.004, cz + ring * math.sin(a)), 0.046, sub=2,
-                             scale=(1.0, 0.8, 1.0)))
+            a = R(96 + i * 360 / 7)
+            lobes.append(ico((ring * 1.12 * math.cos(a), 0.006, cz + ring * 0.95 * math.sin(a)), 0.05,
+                             sub=2, scale=(1.0, 0.78, 1.0)))
         obj("Mascot_Body", lobes, body_m, C, bounce)
-        feet = [ico((x, -0.006, 0.02), 0.024, sub=2, scale=(1.05, 1.0, 0.8)) for x in (0.032, -0.032)]
+        feet = [ico((x, -0.012, 0.021), 0.028, sub=2, scale=(1.1, 1.0, 0.8)) for x in (0.042, -0.042)]
         feet_m = body_m
-        eye = (0.0125, 0.004, 0.036)
-        eye_pos, eye_y = (0.026, 0.14), -0.066
+        eye = (0.012, 0.004, 0.034)
+        eye_pos, eye_y = (0.032, 0.135), -0.072
     elif MASCOT_SHAPE == "robot":
         obj("Mascot_Body", [rbox((0, 0, 0.095), (0.14, 0.13, 0.135), 0.022)], body_m, C, bounce)
         obj("Mascot_Details", [cyl((0, 0, 0.18), 0.005, 0.005, 0.035, seg=5),
@@ -548,7 +558,7 @@ def build_mascot(C):
     obj("Mascot_Feet", feet, feet_m, C, bounce)
     ex, ez = eye_pos
     obj("Mascot_Eyes", [box((x, eye_y, ez), eye) for x in (ex, -ex)], eye_m, C, bounce)
-    focus = empty("Mascot_FocusTarget", C, bounce, loc=(0, -0.066, 0.13), size=0.03)
+    focus = empty("Mascot_FocusTarget", C, bounce, loc=(0, -0.072, 0.13), size=0.03)
     return root, focus
 
 
