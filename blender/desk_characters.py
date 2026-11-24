@@ -533,7 +533,7 @@ def build_human(C):
         # framing the face and falling past the shoulders. Middle of the
         # forehead stays visible under the part.
         hc = Vector((0, 0.02, HZ + 0.01))
-        hr = 0.245
+        hr = 0.258                                           # fuller top volume
 
         def on_head(d, r=hr):
             d = Vector(d).normalized()
@@ -556,10 +556,11 @@ def build_human(C):
                 end = (side * math.cos(az), math.sin(az), el)
                 # alternate clumps sit slightly proud of their neighbours: dark grooves between clumps
                 pts = path(root, end, r=hr + (0.012 if j % 2 else 0.0))
-                hang = Vector((side * math.cos(az), math.sin(az), 0)) * 0.035
-                drop = (0.30 if j == 0 else 0.34) + rnd_h.uniform(-0.04, 0.05)   # uneven clump ends
-                pts += [pts[-1] + hang * (k / 4) * (1 + 0.15 * k) + Vector((0, 0.004 * k, -drop * k / 4))
-                        for k in (1, 2, 3, 4)]
+                hang = Vector((side * math.cos(az), math.sin(az), 0)) * 0.075      # wide silhouette
+                drop = 0.50 + rnd_h.uniform(-0.05, 0.05)                         # long: down to the chest
+                fwd = -0.014 if j <= 2 else 0.004                                # front clumps fall over the shoulders
+                pts += [pts[-1] + hang * (k / 5) * (1 + 0.12 * k) + Vector((0, fwd * k, -drop * k / 5))
+                        for k in (1, 2, 3, 4, 5)]
                 # thick faceted clumps (visible edge thickness), pointed tips
                 w, flat = (0.04, (2.0, 0.8)) if j == 0 else (0.058, (2.4, 0.8))
                 hair_parts += hair_lock(pts, w, 0.026, seg=6, normal_from=hc, flat=flat, tip=0.15)
