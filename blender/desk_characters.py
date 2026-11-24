@@ -508,9 +508,9 @@ def hex_mat(name, hex_color, roughness, subsurface=0.0):
     return m
 
 
-CLAUDE_HEIGHT = 0.24          # metres, bottom of feet to top lobe
-CLAUDE_VOXEL = 0.13           # remesh voxel size in design units (body ~3 units wide)
-CLAUDE_FACET_RATIO = 0.22     # decimate after remesh (1.0 = pure voxel facets)
+CLAUDE_HEIGHT = 0.24          # metres on the desk, bottom of feet to top lobe
+CLAUDE_DECIMATE = 0.07        # COLLAPSE ratio (spec: 0.06-0.08)
+CLAUDE_MB_RESOLUTION = 0.035  # metaball resolution before decimating (spec said 0.08)
 
 
 def _evaluated_mesh(ob):
@@ -520,64 +520,57 @@ def _evaluated_mesh(ob):
 
 
 def build_claude_mascot(C, parent):
-    """Metaball star/cloud body -> mesh -> coarse voxel remesh (flat facets),
-    stubby feet, flush vertical eyes. Origin at the bottom of the feet."""
-    body_m = hex_mat("M_Claude_Body", "#E86A33", 0.8, subsurface=0.15)
+    """Metaball star -> mesh -> Y 0.55 -> Decimate (collapse) for organic
+    triangular facets (no voxel remesh), tucked feet, flush vertical eyes.
+    Built in design units (body ~1.2 tall), then scaled to desk size with the
+    origin (0, 0, 0) at the bottom of the feet."""
+    body_m = hex_mat("M_Claude_Body", "#E86A33", 0.85)
     eye_m = hex_mat("M_Claude_Eyes", "#080808", 0.9)
 
-    # 1. Metaball: 7 balls in the XZ plane (design units) ---------------------
+    # 1. Smooth star body: metaball, 6 balls on the X-Z plane -----------------
     mb = bpy.data.metaballs.new("Claude_Metaball")
-    mb.resolution = mb.render_resolution = 0.04
     mb.threshold = 0.6
-    # (position, radius, stiffness): stiffer lobes stay round bulbs with
-    # small notches between them instead of melting into star points
-    balls = [((0.0, 0.0, 0.0), 1.35, 2.0),                             # centre
-             ((0.0, 0.0, 0.95), 0.86, 3.2),                            # top lobe
-             ((-1.06, 0.0, 0.40), 0.86, 3.2), ((1.06, 0.0, 0.40), 0.86, 3.2),  # upper sides
-             ((-0.93, 0.0, -0.58), 0.86, 3.2), ((0.93, 0.0, -0.58), 0.86, 3.2),  # lower sides
-             ((0.0, 0.0, -0.85), 0.8, 3.2)]                            # bottom centre
-    for co, r, stiff in balls:
+    # Spec resolution is 0.08, but at that size the mesh is already coarse and a
+    # 0.07 collapse leaves ~100 jagged faces. A finer base mesh gives the
+    # decimate enough to work with, producing even facets over round lobes.
+    mb.resolution = mb.render_resolution = CLAUDE_MB_RESOLUTION
+    # Spec layout, nudged to the reference silhouette: top lobe lower and
+    # merged in, upper lobes less flared, lower lobes and belly fuller so the
+    # body reads as a chunky rounded star rather than a head on a body.
+    for co, r in (((0.0, 0.0, 0.55), 0.58),                               # centre core
+                  ((0.0, 0.0, 1.02), 0.40),                               # top lobe
+                  ((-0.37, 0.0, 0.76), 0.40), ((0.37, 0.0, 0.76), 0.40),  # upper lobes
+                  ((-0.36, 0.0, 0.33), 0.40), ((0.36, 0.0, 0.33), 0.40),  # lower lobes
+                  ((0.0, 0.0, 0.22), 0.38)):                              # bottom belly
         el = mb.elements.new()
-        el.type, el.co, el.radius, el.stiffness = "BALL", co, r, stiff
+        el.type, el.co, el.radius = "BALL", co, r
     mb_ob = bpy.data.objects.new("Claude_Metaball", mb)
     C.objects.link(mb_ob)
-    raw = _evaluated_mesh(mb_ob)                         # convert metaball -> mesh
+    raw = _evaluated_mesh(mb_ob)
     bpy.data.objects.remove(mb_ob, do_unlink=True)
     bpy.data.metaballs.remove(mb)
-    for v in raw.vertices:                               # plump front, compact side
-        v.co.y *= 0.72
 
-    # Coarse voxel remesh -> clean chunky low-poly facets
-    tmp = bpy.data.objects.new("Claude_RemeshTmp", raw)
+    # 2. Y scale 0.55, then Decimate (COLLAPSE) for even triangular facets ------
+    for v in raw.vertices:
+        v.co.y *= 0.55
+    tmp = bpy.data.objects.new("Claude_DecimateTmp", raw)
     C.objects.link(tmp)
-    rm = tmp.modifiers.new("Remesh", "REMESH")
-    rm.mode, rm.voxel_size = "VOXEL", CLAUDE_VOXEL
-    if hasattr(rm, "use_smooth_shade"):
-        rm.use_smooth_shade = False
-    if CLAUDE_FACET_RATIO < 1.0:          # break the voxel grid into triangle facets
-        dc = tmp.modifiers.new("Facets", "DECIMATE")
-        dc.ratio = CLAUDE_FACET_RATIO
+    dc = tmp.modifiers.new("Facets", "DECIMATE")
+    dc.decimate_type, dc.ratio = "COLLAPSE", CLAUDE_DECIMATE
     body_me = _evaluated_mesh(tmp)
     bpy.data.objects.remove(tmp, do_unlink=True)
     bpy.data.meshes.remove(raw)
 
-    xs = [v.co.x for v in body_me.vertices]
-    zs = [v.co.z for v in body_me.vertices]
-    W = max(xs) - min(xs)
-    minz, maxz = min(zs), max(zs)
+    # 3. Tucked stubby feet (ico sub 1, r 0.16, Y x1.2) under the bottom edge ---
+    feet_parts = [ico((x, -0.05, 0.13), 0.17, sub=1, scale=(1.0, 1.2, 1.0)) for x in (-0.24, 0.24)]
+    foot_bottom = 0.13 - 0.17
 
-    # 2. Stubby feet (design units): squashed ico spheres, angled outward ----
-    foot_r = 0.15 * W
-    foot_z = minz + 0.06 * W
-    feet_parts = [ico((s * 0.17 * W, -0.05 * W, foot_z), foot_r, sub=1,
-                      scale=(1.1, 1.0, 0.95), rot=(0, s * 10, s * 10)) for s in (-1, 1)]
-    foot_bottom = foot_z - foot_r * 0.95
-
-    # Scale everything to desk size; origin (z = 0) at the bottom of the feet
-    k = CLAUDE_HEIGHT / (maxz - foot_bottom)
+    # Scale to desk size; origin (0, 0, 0) at the bottom of the feet
+    top = max(v.co.z for v in body_me.vertices)
+    k = CLAUDE_HEIGHT / (top - foot_bottom)
     to_world = Matrix.Diagonal((k, k, k, 1.0)) @ Matrix.Translation((0, 0, -foot_bottom))
     body_me.transform(to_world)
-    for p in body_me.polygons:
+    for p in body_me.polygons:                     # shade_flat()
         p.use_smooth = False
     body_me.materials.clear()
     body_me.materials.append(body_m)
@@ -585,26 +578,24 @@ def build_claude_mascot(C, parent):
     body = bpy.data.objects.new("Mascot_Body", body_me)
     C.objects.link(body)
     body.parent = parent
-
     feet = obj("Mascot_Feet", feet_parts, body_m, C, body)
     feet.data.transform(to_world)
 
-    # 3. Vertical eyes flush on the front (-Y) surface --------------------------
+    # 4. Flush vertical eyes: bars 0.06 x 0.04 x 0.26 at (+/-0.16, -0.26, 0.62).
+    # x, z and size are as specified; y is snapped onto the faceted surface so
+    # the bars neither float nor sink.
     from mathutils.bvhtree import BVHTree
     tree = BVHTree.FromPolygons([v.co.copy() for v in body_me.vertices],
                                 [tuple(p.vertices) for p in body_me.polygons])
-    Wm, body_bot, body_top = W * k, (minz - foot_bottom) * k, (maxz - foot_bottom) * k
-    ew, eh = 0.065 * Wm, 0.25 * (body_top - body_bot)
-    ez = body_bot + 0.52 * (body_top - body_bot)
     eye_parts = []
-    for ex in (-0.135 * Wm, 0.135 * Wm):
-        hits = []
-        for dx in (-ew / 2, 0, ew / 2):
-            for dz in (-eh / 2, 0, eh / 2):
-                hit = tree.ray_cast(Vector((ex + dx, -1.0, ez + dz)), Vector((0, 1, 0)))[0]
-                if hit is not None:
-                    hits.append(hit.y)
-        front, back = min(hits) - 0.0015, max(hits) + 0.001
+    ew, ed, eh = 0.065 * k, 0.04 * k, 0.28 * k
+    ez = (0.60 - foot_bottom) * k
+    for ex in (-0.155 * k, 0.155 * k):
+        hits = [tree.ray_cast(Vector((ex + dx, -1.0, ez + dz)), Vector((0, 1, 0)))[0]
+                for dx in (-ew / 2, 0, ew / 2) for dz in (-eh / 2, 0, eh / 2)]
+        ys = [h.y for h in hits if h is not None] or [-0.26 * k]
+        back = max(ys) + 0.002                      # tucked just inside the surface
+        front = min(back - ed, min(ys) - 0.0015)    # never behind the most forward facet
         eye_parts.append(box((ex, (front + back) / 2, ez), (ew, back - front, eh)))
     eyes = obj("Mascot_Eyes", eye_parts, eye_m, C, body)
     if hasattr(eyes, "visible_shadow"):
