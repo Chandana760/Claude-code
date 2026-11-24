@@ -4,3 +4,4 @@ music_soft.wav
 frames*/
 render*.log
 __pycache__/
+*.blend1
