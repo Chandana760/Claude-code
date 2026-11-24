@@ -348,10 +348,11 @@ def build_human(C):
                                      cyl_between((-0.04, -0.15, 1.10), (-0.05, -0.19, 0.98), 0.006, 5)],
             mat("M_Char_Strings", (0.92, 0.92, 0.90)), C, root)
     elif OUTFIT in ("yellow", "lavender"):   # puffy jacket: soft lapels over a dark tee
-        obj("Human_Outfit_Collar", [ico((0.075, -0.125, 1.08), 0.07, sub=2, scale=(0.75, 0.45, 1.25), rot=(10, -22, 0)),
-                                    ico((-0.075, -0.125, 1.08), 0.07, sub=2, scale=(0.75, 0.45, 1.25), rot=(10, 22, 0)),
+        # Flat lapel strips lying on the chest in a V (no rounded lumps)
+        obj("Human_Outfit_Collar", [box((0.045, -0.166, 1.03), (0.042, 0.012, 0.17), rot=(8, 16, 0)),
+                                    box((-0.045, -0.166, 1.03), (0.042, 0.012, 0.17), rot=(8, -16, 0)),
                                     ico((0, 0.04, 1.13), 0.13, sub=2, scale=(1.05, 0.65, 0.4))],
-            cloth, C, root)
+            cloth_dark, C, root)
         # Puffy rolled jacket collar around the neck (no inner shirt blob): a soft
         # ring in a slightly deeper shade, with the lapels meeting below it
         obj("Human_Outfit_TeeCollar", [torus((0, -0.015, 1.105), 0.078, 0.032, rot=(-12, 0, 0), seg=20, mseg=8)],
