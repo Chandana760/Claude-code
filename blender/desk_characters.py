@@ -486,6 +486,148 @@ def build_human(C):
 MASCOT_COLORS = {"orange": (0.8, 0.12, 0.01), "mint": (0.45, 0.92, 0.72), "coral": (1.0, 0.50, 0.45), "yellow": (1.0, 0.90, 0.50)}
 
 
+def hex_linear(h):
+    """'#RRGGBB' (sRGB) -> linear RGB tuple, as Blender's colour fields expect."""
+    def ch(c):
+        c /= 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    return tuple(ch(int(h[i:i + 2], 16)) for i in (1, 3, 5))
+
+
+def hex_mat(name, hex_color, roughness, subsurface=0.0):
+    m = mat(name, hex_linear(hex_color))
+    bsdf = _principled(m)
+    bsdf.inputs["Roughness"].default_value = roughness
+    if subsurface:
+        for n in ("Subsurface Weight", "Subsurface"):
+            if n in bsdf.inputs:
+                bsdf.inputs[n].default_value = subsurface
+                break
+        if "Subsurface Scale" in bsdf.inputs:       # mascot is only ~24 cm tall
+            bsdf.inputs["Subsurface Scale"].default_value = 0.01
+    return m
+
+
+CLAUDE_HEIGHT = 0.24          # metres, bottom of feet to top lobe
+CLAUDE_VOXEL = 0.13           # remesh voxel size in design units (body ~3 units wide)
+CLAUDE_FACET_RATIO = 0.3     # decimate after remesh (1.0 = pure voxel facets)
+
+
+def _evaluated_mesh(ob):
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    return bpy.data.meshes.new_from_object(ob.evaluated_get(dg))
+
+
+def build_claude_mascot(C, parent):
+    """Metaball star/cloud body -> mesh -> coarse voxel remesh (flat facets),
+    stubby feet, flush vertical eyes. Origin at the bottom of the feet."""
+    body_m = hex_mat("M_Claude_Body", "#E86A33", 0.8, subsurface=0.15)
+    eye_m = hex_mat("M_Claude_Eyes", "#080808", 0.9)
+
+    # 1. Metaball: 7 balls in the XZ plane (design units) ---------------------
+    mb = bpy.data.metaballs.new("Claude_Metaball")
+    mb.resolution = mb.render_resolution = 0.04
+    mb.threshold = 0.6
+    balls = [((0.0, 0.0, 0.0), 1.45),                                  # centre
+             ((0.0, 0.0, 0.92), 0.88),                                 # top lobe
+             ((-0.88, 0.0, 0.40), 0.88), ((0.88, 0.0, 0.40), 0.88),    # upper sides
+             ((-0.76, 0.0, -0.55), 0.88), ((0.76, 0.0, -0.55), 0.88),  # lower sides
+             ((0.0, 0.0, -0.85), 0.82)]                                # bottom centre
+    for co, r in balls:
+        el = mb.elements.new()
+        el.type, el.co, el.radius = "BALL", co, r
+    mb_ob = bpy.data.objects.new("Claude_Metaball", mb)
+    C.objects.link(mb_ob)
+    raw = _evaluated_mesh(mb_ob)                         # convert metaball -> mesh
+    bpy.data.objects.remove(mb_ob, do_unlink=True)
+    bpy.data.metaballs.remove(mb)
+    for v in raw.vertices:                               # plump front, compact side
+        v.co.y *= 0.72
+
+    # Coarse voxel remesh -> clean chunky low-poly facets
+    tmp = bpy.data.objects.new("Claude_RemeshTmp", raw)
+    C.objects.link(tmp)
+    rm = tmp.modifiers.new("Remesh", "REMESH")
+    rm.mode, rm.voxel_size = "VOXEL", CLAUDE_VOXEL
+    if hasattr(rm, "use_smooth_shade"):
+        rm.use_smooth_shade = False
+    if CLAUDE_FACET_RATIO < 1.0:          # break the voxel grid into triangle facets
+        dc = tmp.modifiers.new("Facets", "DECIMATE")
+        dc.ratio = CLAUDE_FACET_RATIO
+    body_me = _evaluated_mesh(tmp)
+    bpy.data.objects.remove(tmp, do_unlink=True)
+    bpy.data.meshes.remove(raw)
+
+    xs = [v.co.x for v in body_me.vertices]
+    zs = [v.co.z for v in body_me.vertices]
+    W = max(xs) - min(xs)
+    minz, maxz = min(zs), max(zs)
+
+    # 2. Stubby feet (design units): squashed ico spheres, angled outward ----
+    foot_r = 0.15 * W
+    foot_z = minz + 0.06 * W
+    feet_parts = [ico((s * 0.17 * W, -0.05 * W, foot_z), foot_r, sub=1,
+                      scale=(1.1, 1.0, 0.82), rot=(0, s * 10, s * 10)) for s in (-1, 1)]
+    foot_bottom = foot_z - foot_r * 0.82
+
+    # Scale everything to desk size; origin (z = 0) at the bottom of the feet
+    k = CLAUDE_HEIGHT / (maxz - foot_bottom)
+    to_world = Matrix.Diagonal((k, k, k, 1.0)) @ Matrix.Translation((0, 0, -foot_bottom))
+    body_me.transform(to_world)
+    for p in body_me.polygons:
+        p.use_smooth = False
+    body_me.materials.clear()
+    body_me.materials.append(body_m)
+    body_me.name = "Mascot_Body"
+    body = bpy.data.objects.new("Mascot_Body", body_me)
+    C.objects.link(body)
+    body.parent = parent
+
+    feet = obj("Mascot_Feet", feet_parts, body_m, C, body)
+    feet.data.transform(to_world)
+
+    # 3. Vertical eyes flush on the front (-Y) surface --------------------------
+    from mathutils.bvhtree import BVHTree
+    tree = BVHTree.FromPolygons([v.co.copy() for v in body_me.vertices],
+                                [tuple(p.vertices) for p in body_me.polygons])
+    Wm, body_bot, body_top = W * k, (minz - foot_bottom) * k, (maxz - foot_bottom) * k
+    ew, eh = 0.065 * Wm, 0.25 * (body_top - body_bot)
+    ez = body_bot + 0.53 * (body_top - body_bot)
+    eye_parts = []
+    for ex in (-0.135 * Wm, 0.135 * Wm):
+        hits = []
+        for dx in (-ew / 2, 0, ew / 2):
+            for dz in (-eh / 2, 0, eh / 2):
+                hit = tree.ray_cast(Vector((ex + dx, -1.0, ez + dz)), Vector((0, 1, 0)))[0]
+                if hit is not None:
+                    hits.append(hit.y)
+        front, back = min(hits) - 0.0015, max(hits) + 0.001
+        eye_parts.append(box((ex, (front + back) / 2, ez), (ew, back - front, eh)))
+    eyes = obj("Mascot_Eyes", eye_parts, eye_m, C, body)
+    if hasattr(eyes, "visible_shadow"):
+        eyes.visible_shadow = False
+    return body
+
+
+def add_squash_rig(root, body):
+    """root['squash']: +1 = squashed flat, -1 = stretched tall; volume-preserving,
+    scaling around the body origin at the bottom of the feet."""
+    root["squash"] = 0.0
+    try:
+        root.id_properties_ui("squash").update(min=-1.0, max=1.0,
+                                               description="Squash (+) / stretch (-) about the feet")
+    except Exception:
+        pass
+    for i in range(3):
+        fc = body.driver_add("scale", i)
+        v = fc.driver.variables.new()
+        v.name, v.type = "s", "SINGLE_PROP"
+        v.targets[0].id = root
+        v.targets[0].data_path = '["squash"]'
+        fc.driver.expression = "1 - 0.25 * s" if i == 2 else "1 / sqrt(1 - 0.25 * s)"
+
+
 def build_mascot(C):
     base_col = MASCOT_COLORS[MASCOT_COLOR]
     body_m = mat("M_Mascot_Body", base_col)
@@ -517,42 +659,11 @@ def build_mascot(C):
     feet_m = dark_m
 
     if MASCOT_SHAPE == "claude":
-        # One faceted body whose outline is pushed into six soft scalloped
-        # lobes (one on top), slightly wider than tall, flattened front-to-back;
-        # two tall black eyes and two round feet tucked underneath.
-        cz = 0.12
-
-        def scalloped(bm):
-            # core + 8 overlapping round lobes = soft scalloped outline
-            # big faceted core; lobes only bulge ~2 cm past it, so the outline
-            # reads as one blob with gentle scallops rather than separate balls
-            core = Matrix.LocRotScale(Vector((0, 0, cz)), None, Vector((1.15, 0.82, 0.95)))
-            bmesh.ops.create_icosphere(bm, subdivisions=2, radius=0.09, matrix=core)
-            # (angle from +x, distance, lobe radius): a top bump, four big corner
-            # lobes (the "shoulders" and "hips") and small bulges at the sides
-            for ang, dist, r in ((90, 0.075, 0.055),
-                                 (35, 0.085, 0.058), (145, 0.085, 0.058),
-                                 (-35, 0.08, 0.058), (-145, 0.08, 0.058),
-                                 (0, 0.09, 0.045), (180, 0.09, 0.045)):
-                a = R(ang)
-                m = Matrix.LocRotScale(Vector((1.1 * dist * math.cos(a), 0.0, cz + dist * math.sin(a))),
-                                       None, Vector((1.0, 0.8, 1.0)))
-                bmesh.ops.create_icosphere(bm, subdivisions=2, radius=r, matrix=m)
-        body = obj("Mascot_Body", [scalloped], body_m, C, bounce)
-        # Fuse the overlapping balls into one continuous surface, soften the
-        # seams into gentle notches, then re-facet it low-poly.
-        rm = body.modifiers.new("Fuse", "REMESH")
-        rm.mode, rm.voxel_size = "VOXEL", 0.005
-        if hasattr(rm, "use_smooth_shade"):
-            rm.use_smooth_shade = False
-        sm = body.modifiers.new("SoftenSeams", "SMOOTH")
-        sm.factor, sm.iterations = 0.5, 3
-        dc = body.modifiers.new("LowPoly", "DECIMATE")
-        dc.ratio = 0.04
-        feet = [ico((x, -0.012, 0.024), 0.026, sub=2, scale=(1.15, 1.0, 0.85)) for x in (0.034, -0.034)]
-        feet_m = body_m
-        eye = (0.0125, 0.002, 0.04)
-        eye_pos, eye_y = (0.034, 0.128), -0.079
+        body = build_claude_mascot(C, bounce)
+        add_squash_rig(root, body)
+        top = max(v.co.z for v in body.data.vertices)
+        focus = empty("Mascot_FocusTarget", C, bounce, loc=(0, -0.09, top * 0.5), size=0.03)
+        return root, focus
     elif MASCOT_SHAPE == "robot":
         obj("Mascot_Body", [rbox((0, 0, 0.095), (0.14, 0.13, 0.135), 0.022)], body_m, C, bounce)
         obj("Mascot_Details", [cyl((0, 0, 0.18), 0.005, 0.005, 0.035, seg=5),
@@ -644,6 +755,10 @@ def demo_animation(mouth_keys, lid_keys, mascot_root):
     key_prop("hop", [(150, 0.0), (154, 1.0), (158, 0.0), (162, 0.6), (166, 0.0),
                      (196, 0.0), (200, 1.0), (204, 0.0)])
     key_prop("tilt", [(166, 0.0), (172, 0.6), (180, -0.6), (188, 0.3), (194, 0.0)])
+    if "squash" in mascot_root:                    # anticipation / stretch / landing squash
+        key_prop("squash", [(147, 0.0), (150, 0.6), (152, -0.5), (154, 0.0), (157, -0.3),
+                            (158, 0.6), (160, -0.2), (162, 0.0), (166, 0.5), (169, 0.0),
+                            (193, 0.0), (196, 0.6), (198, -0.5), (200, 0.0), (204, 0.6), (207, 0.0)])
 
 
 def main():
