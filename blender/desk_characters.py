@@ -28,11 +28,11 @@ import bpy
 from mathutils import Euler, Matrix, Vector
 
 # ----------------------------- variant switches ----------------------------- #
-HAIR = "wavy"           # "wavy"   = short messy wavy hair   | "bun" = high bun + side bangs
+HAIR = "long"           # "long" = long dark hair, middle part | "wavy" = short messy wavy | "bun" = high bun + side bangs
 GLASSES = "round"       # "round"  = thin round frames       | "rect" = chunky rectangular frames
 OUTFIT = "hoodie"       # "hoodie" = cobalt blue hoodie | "jacket" = olive utility jacket | "sweater" = burnt orange sweater
-MASCOT_SHAPE = "robot"  # "robot"  = round little robot cube | "fox" = faceted crystal fox | "cactus" = chunky geometric cactus
-MASCOT_COLOR = "mint"   # "mint" | "coral" | "yellow"
+MASCOT_SHAPE = "claude"  # "claude" = orange lobed Claude blob | "robot" = round robot cube | "fox" = crystal fox | "cactus" = geometric cactus
+MASCOT_COLOR = "orange"  # "orange" (Claude) | "mint" | "coral" | "yellow"
 DEMO_ANIMATION = True   # blinks + talk on the Cam_Human shot, hop/tilt on the Cam_Mascot shot
 # ---------------------------------------------------------------------------- #
 
@@ -223,7 +223,7 @@ def build_human(C):
     skin = mat("M_Char_Skin", (0.88, 0.64, 0.50))
     cloth = mat("M_Char_Outfit", OUTFITS[OUTFIT])
     cloth_dark = mat("M_Char_OutfitTrim", tuple(c * 0.7 for c in OUTFITS[OUTFIT]))
-    hair = mat("M_Char_Hair", (0.10, 0.06, 0.05))
+    hair = mat("M_Char_Hair", (0.045, 0.028, 0.025))
     ink = mat("M_Char_FaceInk", (0.03, 0.03, 0.04))
     white = mat("M_Char_EyeWhite", (0.95, 0.95, 0.93))
     frame_col = (0.06, 0.05, 0.07) if GLASSES == "round" else (0.12, 0.06, 0.05)
@@ -291,23 +291,75 @@ def build_human(C):
     obj("Human_Pupils", [ico((x * 0.97, -0.186, HZ - 0.004), 0.016, sub=2, scale=(0.8, 0.4, 1.1))
                          for x in (0.07, -0.07)], ink, C, **hp)
 
-    # Eyelids (shape keys: Open / Blink) — skin-coloured lids above each eye
-    LID_TOP, LID_BOT, LID_Y = HZ + 0.043, HZ + 0.035, -0.197
-    lids = obj("Human_Eyelids", [box((x, LID_Y, (LID_TOP + LID_BOT) / 2), (0.075, 0.006, LID_TOP - LID_BOT))
-                                 for x in (0.07, -0.07)],
-               mat("M_Char_Eyelid", (0.82, 0.58, 0.45)), C, **hp)
-    mid = (LID_TOP + LID_BOT) / 2
+    # Eyelids (shape keys: Open / Blink): curved skin lids that follow the eye
+    # outline, plus a lash line on the lid edge that is driven by Blink.
+    HW, N = 0.033, 9
 
-    def blink(co):
-        if co.z < mid:
-            co.z = HZ - 0.042
-        return co
-    lid_keys = add_shape_keys(lids, "Open", {"Blink": blink})
+    def ell(dx):
+        return math.sqrt(max(0.0, 1.0 - (dx / HW) ** 2))
+
+    def lid_top(dx):
+        return HZ + 0.047 * ell(dx)
+
+    def lid_edge(dx):            # open: thin crescent above the eye
+        return HZ + 0.036 * ell(dx)
+
+    def lid_edge_closed(dx):     # closed: edge follows the bottom of the eye
+        return HZ - 0.040 * ell(dx)
+
+    lid_targets, lash_targets = [], []
+
+    def strip(y, top_fn, bot_fn, targets, closed_top, closed_bot, flick=False):
+        def build(bm):
+            for cx in (0.07, -0.07):
+                xs = [cx - HW + 2 * HW * i / (N - 1) for i in range(N)]
+                top = [bm.verts.new((x, y, top_fn(x - cx))) for x in xs]
+                bot = [bm.verts.new((x, y, bot_fn(x - cx))) for x in xs]
+                targets.extend([closed_top(x - cx) for x in xs] + [closed_bot(x - cx) for x in xs])
+                for i in range(N - 1):
+                    bm.faces.new((bot[i], bot[i + 1], top[i + 1], top[i]))
+                if flick:                                   # little outer lash flick
+                    s = 1 if cx > 0 else -1
+                    o = top[-1] if s > 0 else top[0]
+                    a = bm.verts.new((cx + s * (HW + 0.012), y, HZ + 0.012))
+                    b = bm.verts.new((cx + s * (HW - 0.004), y, HZ + 0.010))
+                    bm.faces.new((o, a, b))
+                    targets.extend([HZ - 0.004, HZ - 0.006])
+        return build
+
+    lids = obj("Human_Eyelids", [strip(-0.199, lid_top, lid_edge, lid_targets,
+                                       lid_top, lid_edge_closed)],
+               mat("M_Char_Eyelid", (0.84, 0.60, 0.47)), C, **hp)
+    lashes = obj("Human_Lashes", [strip(-0.2005, lambda d: lid_edge(d) + 0.004,
+                                        lambda d: lid_edge(d) - 0.002, lash_targets,
+                                        lambda d: lid_edge_closed(d) + 0.002,
+                                        lambda d: lid_edge_closed(d) - 0.004, flick=True)],
+                 ink, C, **hp)
+
+    def key_from_targets(ob, basis, name, targets):
+        ob.shape_key_add(name=basis, from_mix=False)
+        k = ob.shape_key_add(name=name, from_mix=False)
+        for i, z in enumerate(targets):
+            k.data[i].co.z = z
+        return k
+    lid_keys = {"Blink": key_from_targets(lids, "Open", "Blink", lid_targets)}
+    lash_key = key_from_targets(lashes, "Open", "Blink", lash_targets)
+    fc = lash_key.driver_add("value")                    # lashes follow the eyelids
+    v = fc.driver.variables.new()
+    v.name, v.type = "blink", "SINGLE_PROP"
+    v.targets[0].id_type = "KEY"
+    v.targets[0].id = lids.data.shape_keys
+    v.targets[0].data_path = 'key_blocks["Blink"].value'
+    fc.driver.expression = "blink"
+
+    # Soft blush
+    obj("Human_Blush", [ico((s * 0.105, -0.158, HZ - 0.052), 0.022, sub=1, scale=(1.3, 0.25, 0.7))
+                        for s in (1, -1)], mat("M_Char_Blush", (0.95, 0.45, 0.45)), C, **hp)
 
     # Flat plane eyebrows
     brows = []
     for s in (1, -1):
-        brows.append(box((s * 0.075, -0.166, HZ + 0.077), (0.055, 0.002, 0.011), rot=(-12, 0, 0)))
+        brows.append(box((s * 0.075, -0.164, HZ + 0.082), (0.05, 0.002, 0.008), rot=(-12, s * 6, 0)))
     obj("Human_Eyebrows", brows, hair, C, **hp)
 
     # Mouth: dark 4x2-vertex plane (shape keys: Closed / Talk_Open / Smile)
@@ -319,7 +371,7 @@ def build_human(C):
         bot = [bm.verts.new((x, MY, MZ - 0.003)) for x in xs]
         for i in range(3):
             bm.faces.new((bot[i], bot[i + 1], top[i + 1], top[i]))
-    mouth = obj("Human_Mouth", [mouth_plane], mat("M_Char_Mouth", (0.16, 0.03, 0.05)), C, **hp)
+    mouth = obj("Human_Mouth", [mouth_plane], mat("M_Char_Mouth", (0.55, 0.10, 0.16)), C, **hp)
 
     def talk(co):
         inner, lower = abs(co.x) < 0.015, co.z < MZ
@@ -362,7 +414,18 @@ def build_human(C):
     def face_cut(co, bottom):
         return (co.y < -0.05 and co.z < HZ + 0.09) or co.z < bottom
 
-    if HAIR == "wavy":
+    if HAIR == "long":
+        # Cap with only the face cut out, a long back panel past the shoulders,
+        # side curtains framing the face and a middle-parted fringe sweeping out.
+        hair_parts = [ico((0, 0.03, HZ + 0.04), 0.215, sub=2, scale=(1.04, 1.0, 0.9),
+                          cut=lambda co: co.y < -0.05 and co.z < HZ + 0.09),
+                      ico((0, 0.10, HZ - 0.14), 0.20, sub=2, scale=(1.08, 0.55, 1.45),
+                          cut=lambda co: co.y < 0.0),
+                      ico((0.172, -0.06, HZ - 0.12), 0.055, sub=2, scale=(0.85, 0.9, 3.4), rot=(0, -6, 0)),
+                      ico((-0.172, -0.06, HZ - 0.12), 0.055, sub=2, scale=(0.85, 0.9, 3.4), rot=(0, 6, 0)),
+                      ico((0.075, -0.14, HZ + 0.125), 0.07, sub=2, scale=(1.3, 0.4, 0.42), rot=(0, 26, 0)),
+                      ico((-0.075, -0.14, HZ + 0.125), 0.07, sub=2, scale=(1.3, 0.4, 0.42), rot=(0, -26, 0))]
+    elif HAIR == "wavy":
         hair_parts = [ico((0, 0.03, HZ + 0.04), 0.215, sub=2, scale=(1.04, 1.0, 0.9),
                           cut=lambda co: face_cut(co, HZ - 0.07))]
         for _ in range(11):                                    # messy wavy tufts
@@ -395,7 +458,7 @@ def build_human(C):
 
 
 # ------------------------------ mascot -------------------------------------- #
-MASCOT_COLORS = {"mint": (0.45, 0.92, 0.72), "coral": (1.0, 0.50, 0.45), "yellow": (1.0, 0.90, 0.50)}
+MASCOT_COLORS = {"orange": (0.92, 0.17, 0.02), "mint": (0.45, 0.92, 0.72), "coral": (1.0, 0.50, 0.45), "yellow": (1.0, 0.90, 0.50)}
 
 
 def build_mascot(C):
@@ -426,8 +489,23 @@ def build_mascot(C):
 
     feet = [cyl((x, -0.005, 0.0125), 0.021, 0.019, 0.025, seg=6) for x in (0.032, -0.032)]
     eye = (0.013, 0.004, 0.030)   # vertical black rectangle
+    feet_m = dark_m
 
-    if MASCOT_SHAPE == "robot":
+    if MASCOT_SHAPE == "claude":
+        # Faceted orange blob: a core with seven round lobes around its edge
+        # (gap at the bottom for the feet), two tall black eyes, round feet.
+        cz, ring = 0.13, 0.058
+        lobes = [ico((0, 0, cz), 0.084, sub=2, scale=(1.0, 0.8, 0.98))]
+        for i in range(7):
+            a = R(90 + i * 360 / 7)
+            lobes.append(ico((ring * math.cos(a), 0.004, cz + ring * math.sin(a)), 0.046, sub=2,
+                             scale=(1.0, 0.8, 1.0)))
+        obj("Mascot_Body", lobes, body_m, C, bounce)
+        feet = [ico((x, -0.006, 0.02), 0.024, sub=2, scale=(1.05, 1.0, 0.8)) for x in (0.032, -0.032)]
+        feet_m = body_m
+        eye = (0.0125, 0.004, 0.036)
+        eye_pos, eye_y = (0.026, 0.14), -0.066
+    elif MASCOT_SHAPE == "robot":
         obj("Mascot_Body", [rbox((0, 0, 0.095), (0.14, 0.13, 0.135), 0.022)], body_m, C, bounce)
         obj("Mascot_Details", [cyl((0, 0, 0.18), 0.005, 0.005, 0.035, seg=5),
                                cyl((0.073, 0, 0.10), 0.018, 0.018, 0.012, seg=6, rot=(0, 90, 0)),
@@ -467,10 +545,10 @@ def build_mascot(C):
             mat("M_Mascot_Flower", (1.0, 0.45, 0.65)), C, bounce)
         eye_pos, eye_y = (0.022, 0.12), -0.055
 
-    obj("Mascot_Feet", feet, dark_m, C, bounce)
+    obj("Mascot_Feet", feet, feet_m, C, bounce)
     ex, ez = eye_pos
     obj("Mascot_Eyes", [box((x, eye_y, ez), eye) for x in (ex, -ex)], eye_m, C, bounce)
-    focus = empty("Mascot_FocusTarget", C, bounce, loc=(0, -0.07, 0.11), size=0.03)
+    focus = empty("Mascot_FocusTarget", C, bounce, loc=(0, -0.066, 0.13), size=0.03)
     return root, focus
 
 
@@ -488,7 +566,7 @@ def retarget_cameras(human_focus, mascot_focus):
         cam.data.dof.focus_object = focus
 
     place("Cam_Human", (0.20, -0.85, 1.32), (0.45, 0.50, 1.22), 50, human_focus)
-    place("Cam_Mascot", (0.06, -0.68, 0.87), (0.14, -0.20, 0.85), 45, mascot_focus)
+    place("Cam_Mascot", (0.05, -0.80, 0.89), (0.14, -0.20, 0.86), 45, mascot_focus)
 
 
 def demo_animation(mouth_keys, lid_keys, mascot_root):
