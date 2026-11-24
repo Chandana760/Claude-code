@@ -28,7 +28,7 @@ import bpy
 from mathutils import Euler, Matrix, Vector
 
 # ----------------------------- variant switches ----------------------------- #
-HAIR = "strands"        # "strands" = long locks from a side part (reference) | "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
+HAIR = "curtain"        # "curtain" = centre part, two smooth curtains framing the face (reference) | "strands" = long locks from a side part (reference) | "bob" = chin-length bob, side fringe | "long" = long, middle part | "wavy" = short messy | "bun" = high bun
 GLASSES = "big"         # "none" = no glasses | "big" = large thin black round (reference) | "round" = thin round | "rect" = chunky rectangular
 STYLE = "chibi"         # "chibi" = big smooth head on a small low-poly body (reference mix) | "lowpoly" = all faceted
 FACE = "dots"            # "dots" = small black dot eyes with a glint (reference) | "ovals" = white eyes, lids, lashes, brows
@@ -527,7 +527,39 @@ def build_human(C):
     def face_cut(co, bottom):
         return (co.y < -0.05 and co.z < HZ + 0.09) or co.z < bottom
 
-    if HAIR == "strands":
+    if HAIR == "curtain":
+        # Reference hair: near-centre part; a few wide, smooth bands sweep from
+        # the part down each side as two curtains over the forehead corners,
+        # framing the face and falling past the shoulders. Middle of the
+        # forehead stays visible under the part.
+        hc = Vector((0, 0.02, HZ + 0.01))
+        hr = 0.245
+
+        def on_head(d):
+            d = Vector(d).normalized()
+            return hc + Vector((d.x * hr * 1.04, d.y * hr * 0.98, d.z * hr))
+
+        def path(d0, d1, steps=8):
+            a0, a1 = Vector(d0).normalized(), Vector(d1).normalized()
+            return [on_head(a0.slerp(a1, i / steps)) for i in range(steps + 1)]
+
+        hair_parts = [ico((0, 0.03, HZ + 0.03), 0.226, sub=2, scale=(1.06, 1.0, 0.95),
+                          cut=lambda co: co.y < -0.05 and co.z < HZ + 0.07)]
+        N = 9
+        for side in (1, -1):
+            for j in range(N):
+                t = j / (N - 1)
+                root = (side * 0.035 - 0.03, -0.42 + 0.95 * t, 1.0)      # along the part, front -> crown
+                az = math.radians(-48 + 138 * t)                         # front corner -> back
+                el = 0.22 - 0.34 * t
+                end = (side * math.cos(az), math.sin(az), el)
+                pts = path(root, end)
+                hang = Vector((side * math.cos(az), math.sin(az), 0)) * 0.035
+                drop = 0.36 if j > 0 else 0.30
+                pts += [pts[-1] + hang * (k / 4) + Vector((0, 0.004 * k, -drop * k / 4)) for k in (1, 2, 3, 4)]
+                w, flat = (0.034, (2.0, 0.5)) if j == 0 else (0.05, (2.6, 0.5))
+                hair_parts += hair_lock(pts, w, 0.022, seg=10, normal_from=hc, flat=flat)
+    elif HAIR == "strands":
         # Reference hair: dark cap, then chunky locks from a side part that run
         # over the head and hang behind to the shoulders; a swept fringe of locks
         # across the forehead and two locks framing the face to chin level.
