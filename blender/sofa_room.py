@@ -96,7 +96,7 @@ def _aim_cam(name, loc, target, lens, fstop, roll_deg=0.0, focus=None):
 
 # Layout (metres)
 HEAD = Vector((-0.40, 0.62, 0.86))     # Maya's head resting on the pillow
-TILT = -42                             # she lies on her side, head toward frame left
+TILT = -24                             # she lies on her side, head toward frame left
 MASCOT = Vector((-0.10, -0.32, 0.47))  # Claude on the coffee table
 
 
@@ -154,18 +154,15 @@ def apply_sofa_set():
     pil = HEAD + Vector((-0.27, -0.01, -0.12))
     _mesh("Pillow_Cream", [_ico(tuple(pil), 0.23, scale=(0.95, 0.78, 0.85))],
           _mat("M_Pillow_Cream", (0.75, 0.62, 0.45)), room)
-    # Soft dusty-pink blanket draped over her from the chest down along the sofa
-    # (contrasts with her lavender jacket): overlapping soft lumps following her
-    # body line, plus a rolled hem at the top that her arms rest on.
-    mw = root.matrix_world
-    lumps = []
-    for k, lz in enumerate((0.90, 0.68, 0.46, 0.24, 0.02, -0.20)):
-        c = mw @ Vector((0.0, -0.13 + 0.01 * k, lz))
-        c.z = max(c.z, 0.56)                           # rests on the seat
-        lumps.append(_ico(tuple(c), 0.21 - 0.008 * k, scale=(1.25, 0.95, 0.80), rot=(0, TILT * 0.6, 0)))
-    hem_a, hem_b = mw @ Vector((-0.26, -0.24, 0.96)), mw @ Vector((0.26, -0.24, 0.80))
-    for i in range(7):
-        lumps.append(_ico(tuple(hem_a.lerp(hem_b, i / 6)), 0.065, scale=(1, 1, 1), sub=1))
+    # Big puffy blanket heaped over her shoulder and body (reference): chunky
+    # faceted lumps rising almost to her face on the right, down to the seat.
+    lumps = [_ico(tuple(HEAD + Vector(o)), r, scale=sc_, sub=2) for o, r, sc_ in (
+        ((0.30, -0.10, -0.10), 0.22, (1.15, 0.95, 1.00)),     # over the shoulder
+        ((0.52, -0.06, -0.26), 0.25, (1.20, 1.00, 0.95)),     # body
+        ((0.74, -0.02, -0.40), 0.24, (1.25, 1.00, 0.80)),     # down onto the seat
+        ((0.32, -0.24, -0.32), 0.21, (1.20, 0.85, 0.95)),     # front fold
+        ((0.08, -0.20, -0.36), 0.17, (1.15, 0.85, 0.85)),     # tucked under her chin
+    )]
     _mesh("Blanket", lumps, _mat("M_Blanket_DustyPink", (0.55, 0.20, 0.24)), room)
 
     # 4. Claude on the coffee table
@@ -197,8 +194,8 @@ def apply_sofa_set():
             bg.inputs["Color"].default_value = (0.012, 0.012, 0.016, 1)
 
     # 6. Cameras (focus targets stay on the characters)
-    _aim_cam("Cam_Wide", (0.0, -1.95, 1.10), (-0.10, 0.25, 0.55), 32, 4.0)
-    _aim_cam("Cam_Human", HEAD + Vector((0.32, -1.30, 0.10)), HEAD + Vector((0.02, 0, -0.10)), 44, 1.8, roll_deg=30)
+    _aim_cam("Cam_Wide", (-0.06, -2.05, 1.08), (-0.10, 0.30, 0.58), 32, 4.0)
+    _aim_cam("Cam_Human", HEAD + Vector((0.32, -1.30, 0.10)), HEAD + Vector((0.02, 0, -0.10)), 44, 1.8, roll_deg=10)
     _aim_cam("Cam_Mascot", MASCOT + Vector((0.06, -0.88, 0.22)), MASCOT + Vector((0.02, 0, 0.16)), 45, 1.8)
 
 
