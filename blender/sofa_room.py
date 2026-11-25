@@ -398,7 +398,7 @@ def apply_sofa_set():
     # 4. Claude on the coffee table
     mroot = bpy.data.objects["Mascot_Root"]
     mroot.location = MASCOT
-    mroot.rotation_euler = (0, 0, R(-6))
+    mroot.rotation_euler = (0, 0, R(-18))      # turned a little toward her on the sofa
 
     # 5. Lighting: warm lamp from front-right, soft fill, keep Maya/Claude accent lights
     for o in list(lights.objects) if lights else []:
@@ -455,9 +455,14 @@ def apply_sofa_set():
     #  maya   - eye-level close-up, face filling the frame, head only slightly tilted
     #  claude - camera at table height right in front of Claude, her face big and soft behind
     _aim_cam("Cam_Wide", (-0.28, -2.30, 0.98), (-0.28, 0.40, 0.70), 34, 4.0)
-    _aim_cam("Cam_Human", HEAD + Vector((0.12, -0.85, -0.03)), HEAD + Vector((0.04, 0, -0.04)), 32, 2.0, roll_deg=22)
+    # her lines: over Claude - she is sharp on the pillow talking down to him, Claude soft in
+    # the foreground at the bottom of frame, so it is always clear who she is talking to
+    mc0 = MASCOT + Vector((0, 0, 0.12))
+    _aim_cam("Cam_Human", mc0 + Vector((0.10, -0.80, 0.12)), HEAD + Vector((0.06, 0, -0.24)), 52, 2.2, roll_deg=12,
+             focus=bpy.data.objects.get("Human_FocusTarget"))
     mc = MASCOT + Vector((0, 0, 0.12))
-    _aim_cam("Cam_Mascot", mc + Vector((0.02, -0.78, 0.06)), mc + Vector((-0.10, 0.40, 0.20)), 40, 1.8)
+    _aim_cam("Cam_Mascot", mc + Vector((0.02, -0.78, 0.06)), mc + Vector((-0.10, 0.40, 0.20)), 40, 1.8,
+             focus=bpy.data.objects.get("Mascot_FocusTarget"))
 
 
 apply_sofa_set()

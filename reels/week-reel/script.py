@@ -20,7 +20,7 @@ SCRIPT = [
   ('C', '[confidently] I can.', 'claude', 'bounce', 0.4),
   ('M', '[relieved] Great. Send it.', 'wide', 'wink', 0.35),
   ('C', "[helpful] What's their email?", 'claude', 'bounce', 0.4),
-  ('M', "[sleepy] Great. Tell them in the morning. [yawns] Goodnight.", 'maya', 'sleepy', 0.45),
-  ('C', '[softly] Okay... good night.', 'wide', 'tilt', 0.6),
+  ('M', "[sleepy] You have it already! Tell them in the morning. [yawns] Goodnight.", 'maya', 'sleepy', 0.45),
+  ('C', '[softly] Okay, good night...', 'wide', 'tilt', 0.6),
   ('M', "[drowsy, eyes half closed] Actually... send it now. [pause] Before they ask for more edits.", 'maya', 'sleepy', 1.1),
 ]

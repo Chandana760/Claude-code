@@ -353,7 +353,7 @@ def animate():
         elif act == "thinking":
             hx, hy, hz = -0.07 * fade_in, -0.14 * fade_in, 0.10 * fade_in
         elif act == "sleepy":                        # eyes half closed, head sinking into the pillow
-            lid = max(lid, 0.62 * fade_in)
+            lid = max(lid, 0.80 * fade_in)
             hx += 0.06 * fade_in
         elif act == "wink":
             smile = 0.8 * fade_in
