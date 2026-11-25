@@ -38,6 +38,9 @@ def arg(name, default=None):
     return argv[argv.index(name) + 1] if name in argv and argv.index(name) + 1 < len(argv) else default
 
 
+SET = arg("--set", "desk")                     # "desk" (standard) | "sofa" (living room)
+
+
 # ---------------------------------------------------------------- build scene
 def build():
     saved = sys.argv
@@ -47,6 +50,9 @@ def build():
             src = open(os.path.join(BLENDER_DIR, fn)).read()
             src = src.replace("DEMO_ANIMATION = True", "DEMO_ANIMATION = False")
             exec(compile(src, fn, "exec"), {"__name__": "__main__", "__file__": os.path.join(BLENDER_DIR, fn)})
+        if SET != "desk":                     # alternate standard set, e.g. --set sofa
+            fn = os.path.join(BLENDER_DIR, f"{SET}_room.py")
+            exec(compile(open(fn).read(), fn, "exec"), {"__name__": "__main__", "__file__": fn})
     finally:
         sys.argv = saved
 
@@ -217,6 +223,8 @@ def style_for_episode():
     cams = {"Cam_Human": ((0.22, -0.98, 1.40), (0.45, 0.45, 1.27), 36, 1.6),   # headroom for captions
             "Cam_Mascot": ((0.06, -1.02, 0.98), (0.14, -0.20, 0.89), 45, 1.6),
             "Cam_Wide": ((-0.02, -1.85, 1.16), (0.04, 0.30, 1.03), 35, 2.8)}   # tighter, desk-level, monitor in frame (reference)
+    if bpy.context.scene.get("set", "desk") != "desk":
+        return                                  # the alternate set placed its own cameras
     for name, (loc, tgt, lens, fstop) in cams.items():
         cam = bpy.data.objects[name]
         cam.location = loc
