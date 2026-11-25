@@ -540,6 +540,7 @@ def build_human(C):
         hc = Vector((0, 0.015, HZ + 0.005))
         hr = 0.232
         bottom = HZ - float(os.environ.get("HAIR_FALL", "0.25"))   # jaw / shoulder length (shorter when lying down)
+        framing = os.environ.get("HAIR_FRAME") == "1"              # sleek, hugging, face-framing variant
 
         def on_head(d, r=hr):
             d = Vector(d).normalized()
@@ -559,18 +560,34 @@ def build_human(C):
         rnd_h = random.Random(33)
         hair_parts = [ico((0, 0.02, HZ + 0.02), 0.222, sub=2, scale=(1.05, 1.0, 0.95),
                           cut=lambda co: co.y < -0.05 and co.z < HZ + 0.06)]
-        part_x = -0.02
+        part_x = 0.0 if framing else -0.02
         # sides + back: from the crown, over the head, then straight down
         for i in range(20):
             az = math.radians(-22 + i * (224 / 19))                     # cheek -> back -> other cheek (face stays clear)
             root = (part_x + 0.03 * math.cos(az), 0.25 + 0.15 * math.sin(az), 1.0)
             r_i = hr + (0.01 if i % 2 else 0.0)                          # neighbouring locks overlap: grooves
             pts = path(root, (math.cos(az), math.sin(az), 0.05), 7, r_i)
-            pts = fall(pts, bottom + rnd_h.uniform(-0.025, 0.02))
+            # framing variant: ends tuck in toward the neck instead of flaring out
+            pts = fall(pts, bottom + rnd_h.uniform(-0.025, 0.02), flare=-0.03 if framing else 0.012)
             hair_parts += hair_lock(pts, 0.05, 0.03, seg=6, normal_from=hc, flat=(2.2, 0.75), tip=0.25)
+        if framing:
+            # long sleek face-framing strands: from the middle part over the temples,
+            # down along the cheeks, curving inward under the jawline
+            for sx in (1, -1):
+                for k, (dx, dy) in enumerate(((0.0, 0.0), (0.012, 0.03))):
+                    top = path((sx * 0.05, -0.30, 1.0), (sx * 0.95, -0.42, 0.05), 6, hr + 0.008 + 0.006 * k)
+                    p = top[-1]
+                    cheek = [Vector((sx * (abs(p.x) + 0.006 + dx), p.y - 0.020 + dy, HZ - 0.06)),
+                             Vector((sx * (abs(p.x) - 0.004 + dx), p.y - 0.045 + dy, HZ - 0.15)),
+                             Vector((sx * (abs(p.x) - 0.040 + dx), p.y - 0.060 + dy, HZ - 0.22)),
+                             Vector((sx * (abs(p.x) - 0.070 + dx), p.y - 0.055 + dy, HZ - 0.25))]
+                    hair_parts += hair_lock(top + cheek, 0.05, 0.02, seg=6, normal_from=hc, flat=(2.0, 0.7), tip=0.3)
         # fringe: from the front of the part, forward and down over the forehead
         # soft parted bangs: two side-swept groups from the centre part, framing forehead and cheeks
-        for az_deg, el in ((-38, 0.10), (-52, 0.20), (-67, 0.32), (-113, 0.32), (-128, 0.20), (-142, 0.10)):
+        bangs = ((-38, 0.10), (-52, 0.20), (-67, 0.32), (-113, 0.32), (-128, 0.20), (-142, 0.10))
+        if framing:            # clean middle part: bangs sweep to the sides, centre of the forehead clear
+            bangs = ((-28, 0.06), (-42, 0.14), (-56, 0.24), (-124, 0.24), (-138, 0.14), (-152, 0.06))
+        for az_deg, el in bangs:
             az = math.radians(az_deg)
             root = (part_x, -0.15, 1.0)
             pts = path(root, (math.cos(az), math.sin(az), el), 8, hr + 0.006)

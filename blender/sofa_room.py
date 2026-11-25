@@ -185,7 +185,9 @@ def drape_blanket(room, chest, waist, sc):
     legs = _mesh("Blanket_LegsProxy", [sleeve_tube([tuple(waist), tuple(knee), tuple(feet)], 0.17, 0.08),
                                        _ico(tuple(waist + Vector((0.08, 0.02, 0.0))), 1.0, scale=(0.22, 0.20, 0.19))],
                  mat, room)
-    legs.hide_render = True
+    tee = bpy.data.materials.get("M_Char_Tee")       # dark trousers show between waist and blanket
+    if tee:
+        legs.data.materials[0] = tee
     # drape: drop a fine sheet straight down onto her, the hidden legs, the pillow
     # and the sofa, then relax it like fabric (spans sag between contacts, the
     # front edge hangs down over the cushion) and add a few soft folds
@@ -298,7 +300,7 @@ def _aim_cam(name, loc, target, lens, fstop, roll_deg=0.0, focus=None):
 # Layout (metres)
 HEAD = Vector((-0.52, 0.66, 1.00))     # centre of her head, propped on the corner pillow
 HEAD_LOCAL_Z = 1.355                   # head-mesh centre height in her root space
-PILLOW = Vector((-0.87, 0.78, 0.86))   # round pillow wedged upright in the armrest/backrest corner
+PILLOW = Vector((-0.85, 0.63, 0.84))   # round pillow wedged upright in the armrest/backrest corner
 TILT = -60                             # lounging on her side, upper body propped ~30 deg up
 SEAT_TOP = 0.48
 MASCOT = Vector((-0.24, -0.34, 0.47))  # Claude on the coffee table
@@ -357,26 +359,35 @@ def apply_sofa_set():
     # left side of her head and glasses rests snugly against its right side
     _mesh("Pillow_Cream", [_ico(tuple(PILLOW), 1.0, scale=(0.23, 0.16, 0.23), sub=2, rot=(0, 0, -35))],
           _mat("M_Pillow_Cream", hx("#E8DEC8")), room)
-    # Her own dot eyes, open (awake and talking)
+    # Her own dot eyes, open (awake and talking); head pitched ~15 deg down and
+    # rolled ~25 deg onto the pillow so her cheek rests against it
     sc["lid_base"] = 0.0
+    sc["head_pose_offset"] = (R(15), R(25), 0.0)
+    # dot pupils shifted a touch toward Claude on the coffee table
+    pupils = bpy.data.objects["Human_Pupils"]
+    tgt = root.matrix_world.inverted() @ (MASCOT + Vector((0, 0, 0.12)))
+    d = tgt - Vector((0, -0.18, 1.34))
+    g = Vector((d.x, 0, d.z)).normalized() * 0.008
+    for v in pupils.data.vertices:
+        v.co += g
     # Lounging arms (rebuilt sleeves): top shoulder + bent elbow arch up over her
     # side with the forearm resting along her hip; lower arm tucked forward on the cushion
     sleeves = [_ico((sx * 0.125, -0.002, 0.95), 0.20, scale=(0.62, 0.9, 1.15), sub=2) for sx in (1, -1)]
     sleeves += [_ico((0.20, 0.0, 1.06), 0.10, sub=2), _ico((-0.20, 0.0, 1.06), 0.10, sub=2)]
     sleeves += [sleeve_tube([(0.22, 0.0, 1.06), (0.31, -0.02, 0.97), (0.36, -0.04, 0.87)], 0.088, 0.08),
                 _ico((0.36, -0.045, 0.86), 0.082, sub=2),                                       # top elbow
-                sleeve_tube([(0.36, -0.05, 0.85), (0.35, -0.09, 0.74), (0.31, -0.12, 0.65)], 0.074, 0.066),
+                sleeve_tube([(0.36, -0.05, 0.85), (0.36, -0.08, 0.80), (0.34, -0.11, 0.77)], 0.074, 0.066),
                 sleeve_tube([(-0.22, 0.0, 1.06), (-0.25, -0.11, 0.97), (-0.26, -0.21, 0.90)], 0.088, 0.08),
                 _ico((-0.26, -0.215, 0.895), 0.082, sub=2),                                     # lower elbow
                 sleeve_tube([(-0.26, -0.23, 0.90), (-0.29, -0.29, 0.96), (-0.30, -0.33, 1.02)], 0.074, 0.066)]
     _rebuild("Human_Body", sleeves)
-    _rebuild("Human_Hands", [_ico((0.30, -0.13, 0.605), 0.044, scale=(1.1, 0.9, 0.85), sub=2),
+    _rebuild("Human_Hands", [_ico((0.335, -0.13, 0.745), 0.044, scale=(1.1, 0.9, 0.85), sub=2),
                              _ico((-0.30, -0.345, 1.06), 0.044, scale=(1.1, 0.9, 0.85), sub=2)])
     # Throw blanket (#7D6B91) from her waist to the right armrest, over her hips and
     # legs and down over the front of the cushion; chest, arms and head stay uncovered
     waist = root.matrix_world @ Vector((0, 0, 0.72))
     chest = root.matrix_world @ Vector((0, 0, 1.02))   # blanket pulled up to her chest
-    blanket = drape_blanket(room, chest, waist, sc)
+    blanket = drape_blanket(room, waist + Vector((0.19, 0, 0)), waist, sc)   # top edge just below her waist
     # light cream/beige rug under the coffee table
     _mesh("Rug", [_box((-0.05, -0.30, 0.005), (1.8, 1.15, 0.01), bevel=0.004)], _mat("M_Rug_Beige", hx("#D6CFC2")), room)
 
