@@ -352,6 +352,9 @@ def animate():
             talk = clamp(talk + 0.25 * fade_in) if ml else talk
         elif act == "thinking":
             hx, hy, hz = -0.07 * fade_in, -0.14 * fade_in, 0.10 * fade_in
+        elif act == "sleepy":                        # eyes half closed, head sinking into the pillow
+            lid = max(lid, 0.62 * fade_in)
+            hx += 0.06 * fade_in
         elif act == "wink":
             smile = 0.8 * fade_in
             hy = 0.14 * fade_in
@@ -376,7 +379,7 @@ def animate():
         hy -= 0.03 * math.sin(t * 0.45 + 1.0) * listen
 
         # Warm ending: she smiles at the final "Especially those."
-        if t >= LINES[-1]["t"] - 0.2:
+        if t >= LINES[-1]["t"] - 0.2 and LINES[-1].get("act") != "sleepy":
             smile = max(smile, 0.7 * ease((t - LINES[-1]["t"] + 0.2) / 0.6))
             lid = max(lid if lid >= 0.9 else 0.0, 0.0)
 

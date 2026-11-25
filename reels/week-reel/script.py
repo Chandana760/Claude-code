@@ -11,7 +11,7 @@ SCRIPT = [
   ('C', '[gently] What happened today?', 'claude', 'tilt', 0.45),
   ('M', '[sighs] They asked to change the creative and copy. ...Again.', 'maya', 'worried', 0.4),
   ('C', '[calmly] The algorithm is still learning.', 'claude', 'tilt', 0.45),
-  ('M', '[frustrated] I told them that!', 'maya', 'surprised', 0.3),
+  ('M', '[frustrated] I told them that!', 'wide', 'surprised', 0.3),
   ('C', '[curious] And what did they say?', 'claude', 'squint', 0.4),
   ('M', '[mimicking the client, airy] "Let\'s just try something different."', 'maya', 'flat', 0.4),
   ('C', "[incredulous] So they want results from an ad they won't let finish learning?", 'claude', 'squint', 0.45),
@@ -20,5 +20,7 @@ SCRIPT = [
   ('C', '[confidently] I can.', 'claude', 'bounce', 0.4),
   ('M', '[relieved] Great. Send it.', 'wide', 'wink', 0.35),
   ('C', "[helpful] What's their email?", 'claude', 'bounce', 0.4),
-  ('M', "[hesitant] Actually... maybe don't. [whispers] They're typing again.", 'maya', 'worried', 0.5),
+  ('M', "[sleepy] Great. Tell them in the morning. [yawns] Goodnight.", 'maya', 'sleepy', 0.45),
+  ('C', '[softly] Okay... good night.', 'wide', 'tilt', 0.6),
+  ('M', "[drowsy, eyes half closed] Actually... send it now. [pause] Before they ask for more edits.", 'maya', 'sleepy', 1.1),
 ]
