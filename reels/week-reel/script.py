@@ -3,7 +3,7 @@ who, text with ElevenLabs v3 tags, shot (maya|claude|wide), acting
 (Maya: worried|flat|surprised|thinking|wink, Claude: bounce|look-away|squint|tilt|excited),
 pause before (s), optional max length (s) to cut a line off."""
 SCRIPT = [
-  ('M', "[exhausted] Claude, it's been a week.", 'wide', 'flat', 0.15),
+  ('M', "[tired, softly] Claude... [sighs] it's been a week.", 'wide', 'flat', 0.15),
   ('C', "[curious] Since the client's campaign launched?", 'claude', 'tilt', 0.4),
   ('M', '[tired, flatly] Since I slept properly.', 'maya', 'flat', 0.4),
   ('C', "[upbeat] But the campaign is live! That's good!", 'claude', 'bounce', 0.4),

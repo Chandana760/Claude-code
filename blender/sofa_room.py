@@ -303,7 +303,7 @@ def _aim_cam(name, loc, target, lens, fstop, roll_deg=0.0, focus=None):
 # Layout (metres)
 HEAD = Vector((-0.70, 0.62, 0.974))    # centre of her head, propped on the inclined pillow
 HEAD_LOCAL_Z = 1.355                   # head-mesh centre height in her root space
-PILLOW = Vector((-0.711, 0.62, 0.65))   # pillow inclined ~35 deg against the left armrest
+PILLOW = Vector((-0.737, 0.62, 0.613))   # pillow inclined ~35 deg against the left armrest
 TILT = -55                             # half-reclined on her left side, upper body propped up on the pillow
 SEAT_TOP = 0.48
 MASCOT = Vector((-0.24, -0.34, 0.47))  # Claude on the coffee table
@@ -450,9 +450,14 @@ def apply_sofa_set():
     # 6. Cameras (focus targets stay on the characters)
     # angled medium-wide from the front-right: the whole sofa, her asleep on the
     # pillow under the throw, Claude on the coffee table in front
-    _aim_cam("Cam_Wide", (1.10, -2.60, 1.34), (0.00, 0.40, 0.52), 29, 4.0)
-    _aim_cam("Cam_Human", HEAD + Vector((0.45, -1.25, 0.24)), HEAD + Vector((0.14, 0, -0.06)), 40, 2.0, roll_deg=30)
-    _aim_cam("Cam_Mascot", MASCOT + Vector((0.06, -0.88, 0.22)), MASCOT + Vector((0.02, 0, 0.16)), 45, 1.8)
+    # framing from the reference reel:
+    #  wide   - front-on and low: coffee table in the foreground, her on the pillow behind
+    #  maya   - eye-level close-up, face filling the frame, head only slightly tilted
+    #  claude - camera at table height right in front of Claude, her face big and soft behind
+    _aim_cam("Cam_Wide", (-0.28, -2.30, 0.98), (-0.28, 0.40, 0.70), 34, 4.0)
+    _aim_cam("Cam_Human", HEAD + Vector((0.12, -0.85, -0.03)), HEAD + Vector((0.04, 0, -0.04)), 32, 2.0, roll_deg=22)
+    mc = MASCOT + Vector((0, 0, 0.12))
+    _aim_cam("Cam_Mascot", mc + Vector((0.02, -0.78, 0.06)), mc + Vector((-0.10, 0.40, 0.20)), 40, 1.8)
 
 
 apply_sofa_set()
