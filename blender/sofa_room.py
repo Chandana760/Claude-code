@@ -95,9 +95,9 @@ def _aim_cam(name, loc, target, lens, fstop, roll_deg=0.0, focus=None):
 
 
 # Layout (metres)
-HEAD = Vector((-0.40, 0.62, 0.86))     # Maya's head resting on the pillow
+HEAD = Vector((-0.38, 0.66, 0.98))     # Maya's head resting on the pillow
 TILT = -24                             # she lies on her side, head toward frame left
-MASCOT = Vector((-0.10, -0.32, 0.47))  # Claude on the coffee table
+MASCOT = Vector((-0.24, -0.34, 0.47))  # Claude on the coffee table
 
 
 def apply_sofa_set():
@@ -120,15 +120,15 @@ def apply_sofa_set():
     lights = bpy.data.collections.get("Lighting")
 
     # 2. Living room: dark walls, wooden floor, framed picture, sofa, pillows, coffee table, book
-    wall = _mat("M_Room_Wall", (0.034, 0.048, 0.040))         # muted green-grey
-    floor = _mat("M_Room_Floor", (0.10, 0.06, 0.035))
+    wall = _mat("M_Room_Wall", (0.026, 0.033, 0.033))         # dark cool grey-green
+    floor = _mat("M_Room_Floor", (0.28, 0.18, 0.10))         # light floor that catches the warm pool
     _mesh("Room_Floor", [_box((0, 0, -0.025), (8, 8, 0.05))], floor, room)
     _mesh("Room_Walls", [_box((0, 1.35, 1.6), (8, 0.1, 3.2)), _box((-2.2, 0, 1.6), (0.1, 6, 3.2))], wall, room)
     _mesh("Room_PictureFrame", [_box((0.85, 1.29, 1.55), (0.42, 0.03, 0.56), bevel=0.006)],
           _mat("M_Room_FrameGold", (0.75, 0.45, 0.06), rough=0.5), room)
     _mesh("Room_Picture", [_box((0.85, 1.27, 1.55), (0.34, 0.02, 0.48))], _mat("M_Room_Picture", (0.05, 0.04, 0.03)), room)
 
-    sofa_m = _mat("M_Sofa_Green", (0.035, 0.085, 0.06))
+    sofa_m = _mat("M_Sofa_Green", (0.018, 0.075, 0.068))     # teal green
     _mesh("Sofa", [_box((0, 0.70, 0.22), (2.0, 0.80, 0.30), bevel=0.04),        # base
                    _box((0, 0.66, 0.42), (1.80, 0.72, 0.12), bevel=0.05),       # seat cushion
                    _box((0, 1.04, 0.70), (2.0, 0.22, 0.62), bevel=0.07),        # backrest
@@ -157,11 +157,10 @@ def apply_sofa_set():
     # Big puffy blanket heaped over her shoulder and body (reference): chunky
     # faceted lumps rising almost to her face on the right, down to the seat.
     lumps = [_ico(tuple(HEAD + Vector(o)), r, scale=sc_, sub=2) for o, r, sc_ in (
-        ((0.30, -0.10, -0.10), 0.22, (1.15, 0.95, 1.00)),     # over the shoulder
-        ((0.52, -0.06, -0.26), 0.25, (1.20, 1.00, 0.95)),     # body
-        ((0.74, -0.02, -0.40), 0.24, (1.25, 1.00, 0.80)),     # down onto the seat
-        ((0.32, -0.24, -0.32), 0.21, (1.20, 0.85, 0.95)),     # front fold
-        ((0.08, -0.20, -0.36), 0.17, (1.15, 0.85, 0.85)),     # tucked under her chin
+        ((0.36, -0.12, -0.18), 0.24, (1.20, 1.00, 1.00)),     # roll she hugs, leaning into it on the right
+        ((0.70, -0.04, -0.34), 0.25, (1.25, 1.00, 0.90)),     # spilling along the seat
+        ((0.90, 0.00, -0.46), 0.22, (1.20, 1.00, 0.75)),      # end on the armrest side
+        ((0.36, -0.30, -0.38), 0.20, (1.25, 0.85, 0.90)),     # front fold hanging over the seat edge
     )]
     _mesh("Blanket", lumps, _mat("M_Blanket_DustyPink", (0.55, 0.20, 0.24)), room)
 
@@ -175,8 +174,14 @@ def apply_sofa_set():
         if o.name not in ("Key_MayaWarm", "Rim_MascotWarm"):
             bpy.data.objects.remove(o, do_unlink=True)
     lc = lights or room
-    _area("Key_LampWarm", lc, (1.1, -0.9, 1.2), (-0.25, 0.4, 0.65), (1.0, 0.52, 0.22), 160, 0.7)   # warm pool on the characters
-    _area("Fill_RoomCool", lc, (-1.4, -1.6, 1.8), (0.0, 0.5, 0.5), (0.45, 0.50, 0.60), 60, 2.5)
+    # warm spotlight: a pool on the characters, table and floor; walls stay dark
+    sd = bpy.data.lights.get("Key_LampSpot") or bpy.data.lights.new("Key_LampSpot", "SPOT")
+    sd.color, sd.energy, sd.spot_size, sd.spot_blend, sd.shadow_soft_size = (1.0, 0.55, 0.25), 560, R(70), 0.6, 0.25
+    sp = bpy.data.objects.new("Key_LampSpot", sd)
+    lc.objects.link(sp)
+    sp.location = (0.75, -1.05, 2.05)
+    sp.rotation_euler = (Vector((-0.15, 0.0, 0.35)) - sp.location).to_track_quat("-Z", "Y").to_euler()
+    _area("Fill_RoomCool", lc, (-1.4, -1.6, 1.8), (0.0, 0.5, 0.5), (0.40, 0.48, 0.60), 35, 2.5)
     _area("Glow_LampBounce", lc, (0.9, 0.3, 1.0), (0.85, 1.29, 1.55), (1.0, 0.55, 0.25), 25, 0.6)
     k = bpy.data.objects.get("Key_MayaWarm")
     if k:
@@ -194,7 +199,7 @@ def apply_sofa_set():
             bg.inputs["Color"].default_value = (0.012, 0.012, 0.016, 1)
 
     # 6. Cameras (focus targets stay on the characters)
-    _aim_cam("Cam_Wide", (-0.06, -2.05, 1.08), (-0.10, 0.30, 0.58), 32, 4.0)
+    _aim_cam("Cam_Wide", (-0.05, -2.40, 0.98), (-0.10, 0.30, 0.56), 34, 4.0)
     _aim_cam("Cam_Human", HEAD + Vector((0.32, -1.30, 0.10)), HEAD + Vector((0.02, 0, -0.10)), 44, 1.8, roll_deg=10)
     _aim_cam("Cam_Mascot", MASCOT + Vector((0.06, -0.88, 0.22)), MASCOT + Vector((0.02, 0, 0.16)), 45, 1.8)
 
