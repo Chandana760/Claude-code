@@ -50,7 +50,7 @@ def throw_blanket(x0, x1, y_front, y_back, seat, body_y, nx=16, ny=12):
     a soft rounded body ridge from waist to feet, the front edge hanging down over
     the cushion edge, the back tucked against the backrest, and 3-4 gentle folds."""
     def h(u):                                   # blanket height over the seat along her body
-        hip = 0.47 * math.exp(-((u - 0.10) / 0.42) ** 2)       # hip, highest at the waist end
+        hip = 0.40 * math.exp(-((u - 0.16) / 0.42) ** 2)       # hip, highest at the waist end
         legs = 0.25 + 0.06 * math.cos(math.pi * min(1.0, u * 1.1))
         return max(hip, legs)
 
@@ -119,6 +119,62 @@ def sleep_eye_lines(hz, xs=(0.078, -0.078), zc=0.004, half=0.026, dip=0.011, r=0
     return b
 
 
+def _catmull(pts, n=5):
+    P = [Vector(p) for p in pts]
+    P = [P[0] * 2 - P[1]] + P + [P[-1] * 2 - P[-2]]
+    out = []
+    for i in range(1, len(P) - 2):
+        p0, p1, p2, p3 = P[i - 1], P[i], P[i + 1], P[i + 2]
+        for k in range(n):
+            t = k / n
+            out.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t
+                              + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3))
+    out.append(P[-2])
+    return out
+
+
+def sleeve_tube(pts, r0, r1, seg=12):
+    """Smooth puffy sleeve through control points, capped at both ends."""
+    def b(bm):
+        path = _catmull(pts)
+        rings, ref = [], Vector((0, 0, 1))
+        for k, p in enumerate(path):
+            tan = (path[min(len(path) - 1, k + 1)] - path[max(0, k - 1)]).normalized()
+            side = tan.cross(ref)
+            if side.length < 1e-3:
+                side = tan.cross(Vector((1, 0, 0)))
+            side.normalize()
+            up = side.cross(tan).normalized()
+            ref = up
+            r = r0 + (r1 - r0) * k / (len(path) - 1)
+            rings.append([bm.verts.new(p + (side * math.cos(2 * math.pi * a / seg) + up * math.sin(2 * math.pi * a / seg)) * r)
+                          for a in range(seg)])
+        for k in range(len(rings) - 1):
+            for a in range(seg):
+                bm.faces.new((rings[k][a], rings[k][(a + 1) % seg], rings[k + 1][(a + 1) % seg], rings[k + 1][a]))
+        for ring in (rings[0], rings[-1]):
+            bm.faces.new(ring)
+    return b
+
+
+def _rebuild(name, builders, smooth=False):
+    """Replace an existing object's mesh, keeping its object, parent and materials."""
+    ob = bpy.data.objects[name]
+    bm = bmesh.new()
+    for b in builders:
+        b(bm)
+    old = ob.data
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    for m in old.materials:
+        me.materials.append(m)
+    for p in me.polygons:
+        p.use_smooth = smooth
+    ob.data = me
+    return ob
+
+
 def _mesh(name, builders, material, coll, smooth=False):
     me = bpy.data.meshes.new(name)
     bm = bmesh.new()
@@ -177,10 +233,10 @@ def _aim_cam(name, loc, target, lens, fstop, roll_deg=0.0, focus=None):
 
 
 # Layout (metres)
-HEAD = Vector((-0.56, 0.63, 0.86))     # centre of her head, resting on the pillow
+HEAD = Vector((-0.52, 0.66, 1.00))     # centre of her head, propped on the corner pillow
 HEAD_LOCAL_Z = 1.355                   # head-mesh centre height in her root space
-PILLOW = Vector((-0.60, 0.62, 0.565))  # flat cream pillow on the left end of the seat
-TILT = -78                             # lying on her side along the seat, head left, legs right
+PILLOW = Vector((-0.87, 0.78, 0.86))   # round pillow wedged upright in the armrest/backrest corner
+TILT = -60                             # lounging on her side, upper body propped ~30 deg up
 SEAT_TOP = 0.48
 MASCOT = Vector((-0.24, -0.34, 0.47))  # Claude on the coffee table
 
@@ -234,21 +290,51 @@ def apply_sofa_set():
     root.rotation_euler = rot
     root.location = HEAD - rot.to_matrix() @ Vector((0, 0, HEAD_LOCAL_Z))
     bpy.context.view_layer.update()
-    # soft, slightly squashed oval sofa pillow lying flat on the seat; her head
-    # and glasses sink ~2 cm into its centre (no gap)
-    _mesh("Pillow_Cream", [_ico(tuple(PILLOW), 1.0, scale=(0.27, 0.20, 0.088), sub=2)],
+    # plump round cream throw pillow wedged upright into the left corner; the
+    # left side of her head and glasses rests snugly against its right side
+    _mesh("Pillow_Cream", [_ico(tuple(PILLOW), 1.0, scale=(0.23, 0.16, 0.23), sub=2, rot=(0, 0, -35))],
           _mat("M_Pillow_Cream", hx("#E8DEC8")), room)
-    sc["head_pose_offset"] = (0.0, 0.0, 0.0)
-    sc["lid_base"] = 0.0
-    # Closed eyes: two calm U-shaped lash lines replace the dot eyes
+    # Awake and tired: open white oval eyes, dark pupils, heavy upper lids and brows
+    for n in ("Human_EyeWhites", "Human_Eyelids", "Human_Lashes", "Human_Eyebrows"):
+        o = bpy.data.objects.get(n)
+        if o:
+            o.hide_render = o.hide_viewport = False
+    sc["lid_base"] = 0.34
+    # pupils look down and toward Claude on the coffee table
     pupils = bpy.data.objects["Human_Pupils"]
-    pupils.hide_render = pupils.hide_viewport = True
-    sleep = _mesh("Human_SleepEyes", [sleep_eye_lines(1.34)], pupils.data.materials[0], room)
-    room.objects.unlink(sleep)
-    pupils.users_collection[0].objects.link(sleep)
-    sleep.parent = pupils.parent
-    sleep.matrix_parent_inverse = pupils.matrix_parent_inverse.copy()
-    sleep.location, sleep.rotation_euler, sleep.scale = pupils.location, pupils.rotation_euler, pupils.scale
+    target = root.matrix_world.inverted() @ (MASCOT + Vector((0, 0, 0.12)))
+    def look(ex):
+        d = target - Vector((ex, -0.18, 1.34))
+        g = Vector((d.x, d.z)).normalized() * 0.011
+        return Vector((ex + g.x, -0.183, 1.34 + g.y - 0.004))
+    pupils.location = (0, 0, -1.34)
+    parts = []
+    for ex in (0.07, -0.07):
+        c = look(ex)
+        parts.append(_ico(tuple(c), 0.017, scale=(0.8, 0.4, 1.05), sub=2))
+        parts.append(_ico(tuple(c + Vector((0.005, -0.007, 0.006))), 0.0045, scale=(1, 0.5, 1), sub=1))
+    _rebuild("Human_Pupils", parts)
+    pm = pupils.data
+    glint_r = 0.006
+    for p in pm.polygons:
+        c = p.center
+        for ex in (0.07, -0.07):
+            g = look(ex) + Vector((0.005, -0.007, 0.006))
+            if (c - g).length < glint_r and len(pm.materials) > 1:
+                p.material_index = 1
+    # Lounging arms (rebuilt sleeves): top shoulder + bent elbow arch up over her
+    # side with the forearm resting along her hip; lower arm tucked forward on the cushion
+    sleeves = [_ico((sx * 0.125, -0.002, 0.95), 0.20, scale=(0.62, 0.9, 1.15), sub=2) for sx in (1, -1)]
+    sleeves += [_ico((0.20, 0.0, 1.06), 0.10, sub=2), _ico((-0.20, 0.0, 1.06), 0.10, sub=2)]
+    sleeves += [sleeve_tube([(0.22, 0.0, 1.06), (0.31, -0.02, 0.97), (0.36, -0.04, 0.87)], 0.088, 0.08),
+                _ico((0.36, -0.045, 0.86), 0.082, sub=2),                                       # top elbow
+                sleeve_tube([(0.36, -0.05, 0.85), (0.35, -0.09, 0.74), (0.31, -0.12, 0.65)], 0.074, 0.066),
+                sleeve_tube([(-0.22, 0.0, 1.06), (-0.25, -0.11, 0.97), (-0.26, -0.21, 0.90)], 0.088, 0.08),
+                _ico((-0.26, -0.215, 0.895), 0.082, sub=2),                                     # lower elbow
+                sleeve_tube([(-0.26, -0.23, 0.90), (-0.29, -0.29, 0.96), (-0.30, -0.33, 1.02)], 0.074, 0.066)]
+    _rebuild("Human_Body", sleeves)
+    _rebuild("Human_Hands", [_ico((0.30, -0.13, 0.605), 0.044, scale=(1.1, 0.9, 0.85), sub=2),
+                             _ico((-0.30, -0.345, 1.06), 0.044, scale=(1.1, 0.9, 0.85), sub=2)])
     # Throw blanket (#7D6B91) from her waist to the right armrest, over her hips and
     # legs and down over the front of the cushion; chest, arms and head stay uncovered
     waist = root.matrix_world @ Vector((0, 0, 0.72))
@@ -315,7 +401,7 @@ def apply_sofa_set():
     # angled medium-wide from the front-right: the whole sofa, her asleep on the
     # pillow under the throw, Claude on the coffee table in front
     _aim_cam("Cam_Wide", (1.10, -2.60, 1.34), (0.00, 0.40, 0.52), 29, 4.0)
-    _aim_cam("Cam_Human", HEAD + Vector((0.42, -1.10, 0.22)), HEAD + Vector((0.12, 0, -0.04)), 40, 1.8, roll_deg=32)
+    _aim_cam("Cam_Human", HEAD + Vector((0.50, -1.45, 0.20)), HEAD + Vector((0.16, 0, -0.10)), 36, 2.0, roll_deg=18)
     _aim_cam("Cam_Mascot", MASCOT + Vector((0.06, -0.88, 0.22)), MASCOT + Vector((0.02, 0, 0.16)), 45, 1.8)
 
 
