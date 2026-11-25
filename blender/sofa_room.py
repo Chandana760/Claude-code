@@ -301,10 +301,11 @@ def _aim_cam(name, loc, target, lens, fstop, roll_deg=0.0, focus=None):
 
 
 # Layout (metres)
-HEAD = Vector((-0.52, 0.66, 1.00))     # centre of her head, propped on the corner pillow
+SEAT_ANCHOR = Vector((-0.30, 0.70, 0.52))   # her torso base, sitting on the seat right of the pillow
 HEAD_LOCAL_Z = 1.355                   # head-mesh centre height in her root space
-PILLOW = Vector((-0.85, 0.63, 0.84))   # round pillow wedged upright in the armrest/backrest corner
-TILT = -60                             # lounging on her side, upper body propped ~30 deg up
+PILLOW = Vector((-0.60, 0.50, 0.70))  # round pillow upright on the left seat, against the armrest
+TILT = -30                             # upper body and head leaning ~30 deg left onto the pillow
+HEAD = SEAT_ANCHOR + Euler((0, math.radians(TILT), 0)).to_matrix() @ Vector((0, 0, HEAD_LOCAL_Z - 0.72))
 SEAT_TOP = 0.48
 MASCOT = Vector((-0.24, -0.34, 0.47))  # Claude on the coffee table
 
@@ -350,22 +351,18 @@ def apply_sofa_set():
     _mesh("Table_Book", [_box((0.30, -0.30, 0.48), (0.22, 0.15, 0.03), bevel=0.004, rot=(0, 0, 8))],
           _mat("M_Book", (0.04, 0.12, 0.11)), room)
 
-    # 3. Maya lies on her side along the seat: head on the pillow at the left
-    #    armrest, body toward the right, bent arms together in front of her chest
+    # 3. Maya sits on the sofa just right of the round pillow, leaning ~30 deg left
+    #    so her chin and lower cheek rest on the pillow's upper-right curve
     root = bpy.data.objects["Human_Root"]
     bpy.context.view_layer.update()
     rot = Euler((0, R(TILT), 0))
     root.rotation_euler = rot
-    root.location = HEAD - rot.to_matrix() @ Vector((0, 0, HEAD_LOCAL_Z))
+    root.location = SEAT_ANCHOR - rot.to_matrix() @ Vector((0, 0, 0.72))
     bpy.context.view_layer.update()
-    # plump round cream throw pillow wedged upright into the left corner; the
-    # left side of her head and glasses rests snugly against its right side
-    _mesh("Pillow_Cream", [_ico(tuple(PILLOW), 1.0, scale=(0.23, 0.16, 0.23), sub=2, rot=(0, 0, -35))],
+    _mesh("Pillow_Cream", [_ico(tuple(PILLOW), 1.0, scale=(0.22, 0.17, 0.20), sub=2, rot=(0, 0, 10))],
           _mat("M_Pillow_Cream", hx("#E8DEC8")), room)
-    # Her own dot eyes, open (awake and talking); head pitched ~15 deg down and
-    # rolled ~25 deg onto the pillow so her cheek rests against it
     sc["lid_base"] = 0.0
-    sc["head_pose_offset"] = (R(15), R(25), 0.0)
+    sc["head_pose_offset"] = (R(6), 0.0, 0.0)
     # dot pupils shifted a touch toward Claude on the coffee table
     pupils = bpy.data.objects["Human_Pupils"]
     tgt = root.matrix_world.inverted() @ (MASCOT + Vector((0, 0, 0.12)))
@@ -373,32 +370,26 @@ def apply_sofa_set():
     g = Vector((d.x, 0, d.z)).normalized() * 0.008
     for v in pupils.data.vertices:
         v.co += g
-    # Lounging arms (rebuilt sleeves): the top shoulder shrugs up and forward with
-    # the bent elbow arching OVER the blanket's top edge; the lower arm and hand are
-    # tucked down in front of her belly, under the blanket
+    # Sleeves only (no hands): lower (left) sleeve rests down on the seat in the gap
+    # between pillow and duvet; the top shoulder/sleeve angles up and right above the
+    # duvet with the forearm tucked behind the mound
     torso_parts = [_ico((sx * 0.125, -0.002, 0.95), 0.20, scale=(0.62, 0.9, 1.15), sub=2) for sx in (1, -1)]
     torso_parts += [_ico((0.20, 0.0, 1.06), 0.10, sub=2), _ico((-0.20, 0.0, 1.06), 0.10, sub=2)]
-    top_arm = [sleeve_tube([(0.23, -0.02, 1.07), (0.35, -0.07, 1.01), (0.43, -0.11, 0.92)], 0.090, 0.082),
-               _ico((0.43, -0.115, 0.91), 0.084, sub=2),                                       # top elbow
-               sleeve_tube([(0.43, -0.12, 0.90), (0.41, -0.15, 0.84), (0.37, -0.17, 0.79)], 0.074, 0.066)]
-    low_arm = [sleeve_tube([(-0.22, -0.02, 1.05), (-0.25, -0.13, 0.95), (-0.24, -0.20, 0.86)], 0.088, 0.08),
-               _ico((-0.24, -0.205, 0.855), 0.082, sub=2),                                      # lower elbow
-               sleeve_tube([(-0.23, -0.21, 0.85), (-0.17, -0.23, 0.79), (-0.10, -0.22, 0.75)], 0.074, 0.066)]
-    top_hand = [_ico((0.365, -0.185, 0.765), 0.044, scale=(1.1, 0.9, 0.85), sub=2)]
-    low_hand = [_ico((-0.07, -0.22, 0.74), 0.044, scale=(1.1, 0.9, 0.85), sub=2)]
-    _rebuild("Human_Body", torso_parts + top_arm + low_arm)
-    _rebuild("Human_Hands", top_hand + low_hand)
-    # blanket collision shape: everything under the blanket (torso + tucked lower arm),
-    # but NOT the top arm, which rests on top of it
-    proxy = _mesh("Blanket_BodyProxy", torso_parts + low_arm + low_hand, _mat("M_Proxy", (0, 0, 0)), room)
-    proxy.parent = root
-    bpy.context.view_layer.update()
-    # Throw blanket (#7D6B91): from mid-ribcage (just under the collarbone) to the
-    # right armrest, over her waist, hips and legs and down the front of the cushion
-    waist = root.matrix_world @ Vector((0, 0, 0.72))
-    chest = root.matrix_world @ Vector((0, 0, 1.0))
-    blanket = drape_blanket(room, chest, waist, sc)
-    bpy.data.objects.remove(proxy, do_unlink=True)
+    low_arm = [sleeve_tube([(-0.22, -0.02, 1.05), (-0.29, -0.10, 0.94), (-0.31, -0.17, 0.82)], 0.088, 0.08),
+               _ico((-0.31, -0.175, 0.815), 0.082, sub=2),
+               sleeve_tube([(-0.31, -0.18, 0.81), (-0.30, -0.24, 0.70), (-0.27, -0.28, 0.60)], 0.076, 0.07)]
+    top_arm = [sleeve_tube([(0.23, -0.02, 1.07), (0.36, -0.06, 1.02), (0.45, -0.12, 0.94)], 0.090, 0.082),
+               _ico((0.45, -0.125, 0.935), 0.084, sub=2),
+               sleeve_tube([(0.45, -0.13, 0.93), (0.40, -0.24, 0.88), (0.32, -0.32, 0.86)], 0.074, 0.066)]
+    _rebuild("Human_Body", torso_parts + low_arm + top_arm)
+    hands = bpy.data.objects["Human_Hands"]
+    hands.hide_render = hands.hide_viewport = True
+    # 4. Thick, puffy lavender duvet: a big rounded upper dome plus a horizontal lower
+    #    fold on the right half of the seat, in front of her chest and lap
+    duvet = _mat("M_Blanket_Lavender", hx("#7D6B91"), rough=0.85)
+    _mesh("Blanket", [_ico((0.16, 0.40, 0.86), 1.0, scale=(0.40, 0.30, 0.32), sub=2, rot=(0, 8, 0)),
+                      _ico((0.24, 0.30, 0.60), 1.0, scale=(0.56, 0.27, 0.15), sub=2, rot=(0, -4, 0))],
+          duvet, room)
     # light cream/beige rug under the coffee table
     _mesh("Rug", [_box((-0.05, -0.30, 0.005), (1.8, 1.15, 0.01), bevel=0.004)], _mat("M_Rug_Beige", hx("#D6CFC2")), room)
 
@@ -457,8 +448,8 @@ def apply_sofa_set():
     # 6. Cameras (focus targets stay on the characters)
     # angled medium-wide from the front-right: the whole sofa, her asleep on the
     # pillow under the throw, Claude on the coffee table in front
-    _aim_cam("Cam_Wide", (1.10, -2.60, 1.34), (0.00, 0.40, 0.52), 29, 4.0)
-    _aim_cam("Cam_Human", HEAD + Vector((0.50, -1.45, 0.20)), HEAD + Vector((0.16, 0, -0.10)), 36, 2.0, roll_deg=18)
+    _aim_cam("Cam_Wide", (-0.18, -2.35, 1.30), (-0.18, 0.40, 0.64), 38, 4.0)
+    _aim_cam("Cam_Human", HEAD + Vector((0.28, -1.35, 0.12)), HEAD + Vector((0.20, 0, -0.16)), 40, 2.0)
     _aim_cam("Cam_Mascot", MASCOT + Vector((0.06, -0.88, 0.22)), MASCOT + Vector((0.02, 0, 0.16)), 45, 1.8)
 
 
