@@ -20,6 +20,7 @@ Pick the variant for each bracketed option below.
 """
 
 import math
+import os
 import random
 import sys
 
@@ -289,8 +290,8 @@ def build_human(C):
         _sb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
     cloth = mat("M_Char_Outfit", OUTFITS[OUTFIT])
     cloth_dark = mat("M_Char_OutfitTrim", tuple(c * 0.7 for c in OUTFITS[OUTFIT]))
-    hair = mat("M_Char_Hair", (0.008, 0.006, 0.006))      # near-black (reference)
-    _principled(hair).inputs["Roughness"].default_value = 0.65  # soft highlight, no plastic sheen
+    hair = mat("M_Char_Hair", hex_linear("#2A1B14"))      # rich dark espresso brown: facets catch the light
+    _principled(hair).inputs["Roughness"].default_value = 0.75
     ink = mat("M_Char_FaceInk", (0.03, 0.03, 0.04))
     white = mat("M_Char_EyeWhite", (0.95, 0.95, 0.93))
     frame_col = {"big": (0.008, 0.008, 0.01), "round": (0.06, 0.05, 0.07)}.get(GLASSES, (0.12, 0.06, 0.05))
@@ -538,7 +539,7 @@ def build_human(C):
         # glasses; side locks hang in front of the ears.
         hc = Vector((0, 0.015, HZ + 0.005))
         hr = 0.232
-        bottom = HZ - 0.25                                   # jaw / top-of-shoulder length
+        bottom = HZ - float(os.environ.get("HAIR_FALL", "0.25"))   # jaw / shoulder length (shorter when lying down)
 
         def on_head(d, r=hr):
             d = Vector(d).normalized()
@@ -568,7 +569,8 @@ def build_human(C):
             pts = fall(pts, bottom + rnd_h.uniform(-0.025, 0.02))
             hair_parts += hair_lock(pts, 0.05, 0.03, seg=6, normal_from=hc, flat=(2.2, 0.75), tip=0.25)
         # fringe: from the front of the part, forward and down over the forehead
-        for az_deg, el in ((-52, 0.24), (-66, 0.32), (-79, 0.40), (-101, 0.40), (-114, 0.32), (-128, 0.24)):   # parted in the middle
+        # soft parted bangs: two side-swept groups from the centre part, framing forehead and cheeks
+        for az_deg, el in ((-38, 0.10), (-52, 0.20), (-67, 0.32), (-113, 0.32), (-128, 0.20), (-142, 0.10)):
             az = math.radians(az_deg)
             root = (part_x, -0.15, 1.0)
             pts = path(root, (math.cos(az), math.sin(az), el), 8, hr + 0.006)

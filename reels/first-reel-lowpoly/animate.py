@@ -45,6 +45,8 @@ SET = arg("--set", "desk")                     # "desk" (standard) | "sofa" (liv
 def build():
     saved = sys.argv
     sys.argv = [saved[0]]                      # keep the build scripts' own CLI flags quiet
+    if SET == "sofa":
+        os.environ["HAIR_FALL"] = "0.12"       # lying down: back hair tucks behind the pillow
     try:
         for fn in ("cozy_desk_studio.py", "desk_characters.py"):
             src = open(os.path.join(BLENDER_DIR, fn)).read()

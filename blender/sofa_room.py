@@ -126,8 +126,8 @@ def _aim_cam(name, loc, target, lens, fstop, roll_deg=0.0, focus=None):
 
 
 # Layout (metres)
-PILLOW = Vector((-0.74, 0.80, 0.68))   # round cream pillow wedged into the left couch corner
-HEAD = PILLOW + Vector((0.30, -0.07, 0.20))   # her cheek rests right on the pillow (no gap)
+HEAD = Vector((-0.44, 0.73, 0.88))     # her head, resting on the pillow
+PILLOW = Vector((-0.69, 0.76, 0.69))   # cream pillow nudged forward/right: cheek and glasses sink into it
 TILT = -40                             # she lies on her side, head toward frame left
 MASCOT = Vector((-0.24, -0.34, 0.47))  # Claude on the coffee table
 
@@ -195,13 +195,16 @@ def apply_sofa_set():
     hip = mw @ Vector((0.0, 0.06, 0.42))
     seat_top = 0.48
     mounds = []
-    for off, rad in (((0.10, 0.02, 0.0), (0.31, 0.28, 0.24)), ((0.50, 0.06, -0.08), (0.32, 0.27, 0.21))):
-        c = hip + Vector(off)
-        c.z = max(c.z, seat_top + rad[2] * 0.55)
+    # two big plump overlapping domes pulled up over hip, stomach and right shoulder
+    stomach = mw @ Vector((0.0, 0.0, 0.72))
+    for c, rad in ((stomach + Vector((0.02, 0.02, -0.02)), (0.36, 0.33, 0.36)),     # over stomach + shoulder
+                   (hip + Vector((0.40, 0.06, 0.0)), (0.40, 0.32, 0.30))):        # over hip and legs
+        c = c.copy()
+        c.z = max(c.z, seat_top + rad[2] * 0.45)
         mounds.append(_ico(tuple(c), 1.0, scale=rad, sub=3))
     blanket = _mesh("Blanket", mounds, _mat("M_Blanket_Lavender", hx("#7D6B91"), rough=0.85), room)
     dec = blanket.modifiers.new("LowPoly", "DECIMATE")
-    dec.ratio = 160 / max(1, len(blanket.data.polygons))
+    dec.ratio = 120 / max(1, len(blanket.data.polygons))
     # light cream/beige rug under the coffee table
     _mesh("Rug", [_box((-0.05, -0.30, 0.005), (1.8, 1.15, 0.01), bevel=0.004)], _mat("M_Rug_Beige", hx("#D6CFC2")), room)
 
@@ -239,6 +242,8 @@ def apply_sofa_set():
     lp = bpy.data.objects.new("Lamp_BehindArmrest", ld)
     lc.objects.link(lp)
     lp.location = (TX, TY, TOP + 0.36)
+    # warm soft rim/fill (#FFE4C4) on her hair, the pillow and the top curve of the blanket
+    _area("Rim_HairWarm", lc, (-0.60, 1.05, 1.30), (-0.30, 0.62, 0.80), hx("#FFE4C4"), 45, 0.6)
     _area("Glow_LampBounce", lc, (0.9, 0.3, 1.0), (0.85, 1.29, 1.55), (1.0, 0.55, 0.25), 25, 0.6)
     k = bpy.data.objects.get("Key_MayaWarm")
     if k:
@@ -256,7 +261,7 @@ def apply_sofa_set():
             bg.inputs["Color"].default_value = (0.012, 0.012, 0.016, 1)
 
     # 6. Cameras (focus targets stay on the characters)
-    _aim_cam("Cam_Wide", (-0.36, -3.90, 1.18), (-0.34, 0.30, 0.64), 45, 4.0)   # 45mm medium-wide: armrest, table, picture
+    _aim_cam("Cam_Wide", (-0.24, -3.05, 0.98), (-0.22, 0.30, 0.68), 58, 4.0)   # intimate medium: couch + table   # 45mm medium-wide: armrest, table, picture
     _aim_cam("Cam_Human", HEAD + Vector((0.32, -1.30, 0.10)), HEAD + Vector((0.02, 0, -0.10)), 44, 1.8, roll_deg=10)
     _aim_cam("Cam_Mascot", MASCOT + Vector((0.06, -0.88, 0.22)), MASCOT + Vector((0.02, 0, 0.16)), 45, 1.8)
 
