@@ -50,7 +50,7 @@ def throw_blanket(x0, x1, y_front, y_back, seat, body_y, nx=16, ny=12):
     a soft rounded body ridge from waist to feet, the front edge hanging down over
     the cushion edge, the back tucked against the backrest, and 3-4 gentle folds."""
     def h(u):                                   # blanket height over the seat along her body
-        hip = 0.40 * math.exp(-((u - 0.16) / 0.42) ** 2)       # hip, highest at the waist end
+        hip = 0.49 * math.exp(-((u - 0.04) / 0.48) ** 2)       # hip, highest at the waist end
         legs = 0.25 + 0.06 * math.cos(math.pi * min(1.0, u * 1.1))
         return max(hip, legs)
 
@@ -69,8 +69,8 @@ def throw_blanket(x0, x1, y_front, y_back, seat, body_y, nx=16, ny=12):
                 else:
                     v = (j - nd) / (ny - nd)
                     y = y_front + (y_back - y_front) * v
-                    d = (y - body_y) / 0.27
-                    ridge = math.exp(-d ** 4)                    # flat-topped ridge over her body
+                    d = (y - (body_y - 0.04)) / 0.30
+                    ridge = math.exp(-1.6 * d * d)                # soft rounded drape over her body
                     fold = 0.032 * math.sin(2 * math.pi * (1.75 * u + 0.55 * v)) * (0.35 + 0.65 * ridge)
                     z = seat + 0.02 + h(u) * ridge + fold
                     if j == nd:                 # rounded lip over the cushion edge
@@ -173,6 +173,69 @@ def _rebuild(name, builders, smooth=False):
         p.use_smooth = smooth
     ob.data = me
     return ob
+
+
+def drape_blanket(room, chest, waist, sc):
+    """Lavender throw dropped as real cloth over her (chest to feet) and the seat,
+    then frozen into a flat-shaded low-poly mesh with 3 cm thickness."""
+    mat = _mat("M_Blanket_Lavender", hx("#7D6B91"), rough=0.85)
+    # hidden legs under the blanket so the throw drapes over hips, knees and feet
+    feet = Vector((0.80, waist.y - 0.02, SEAT_TOP + 0.08))
+    knee = Vector((0.42, waist.y - 0.10, SEAT_TOP + 0.11))
+    legs = _mesh("Blanket_LegsProxy", [sleeve_tube([tuple(waist), tuple(knee), tuple(feet)], 0.17, 0.08),
+                                       _ico(tuple(waist + Vector((0.08, 0.02, 0.0))), 1.0, scale=(0.22, 0.20, 0.19))],
+                 mat, room)
+    legs.hide_render = True
+    # drape: drop a fine sheet straight down onto her, the hidden legs, the pillow
+    # and the sofa, then relax it like fabric (spans sag between contacts, the
+    # front edge hangs down over the cushion) and add a few soft folds
+    from mathutils.bvhtree import BVHTree
+    bpy.context.view_layer.update()
+    verts, polys = [], []
+    for n in ("Blanket_LegsProxy", "Sofa", "Pillow_Cream", "Human_Body", "Human_Torso", "Human_Hands", "Room_Floor"):
+        o = bpy.data.objects[n]
+        off = len(verts)
+        verts += [o.matrix_world @ v.co for v in o.data.vertices]
+        polys += [[off + i for i in p.vertices] for p in o.data.polygons]
+    bvh = BVHTree.FromPolygons(verts, polys)
+    x0, x1, y0, y1 = chest.x, 0.90, 0.14, 1.00
+    nx, ny = 44, 34
+    floor_z = [[0.0] * (nx + 1) for _ in range(ny + 1)]
+    for j in range(ny + 1):
+        for i in range(nx + 1):
+            p = Vector((x0 + (x1 - x0) * i / nx, y0 + (y1 - y0) * j / ny, 2.0))
+            hit = bvh.ray_cast(p, Vector((0, 0, -1)))
+            floor_z[j][i] = (hit[0].z if hit[0] else 0.0) + 0.018
+    Z = [row[:] for row in floor_z]
+    for it in range(260):                                    # fabric relaxation
+        N = [row[:] for row in Z]
+        for j in range(ny + 1):
+            for i in range(nx + 1):
+                nb = [Z[jj][ii] for jj, ii in ((j - 1, i), (j + 1, i), (j, i - 1), (j, i + 1)) if 0 <= jj <= ny and 0 <= ii <= nx]
+                N[j][i] = max(floor_z[j][i], sum(nb) / len(nb) - 0.0006)
+        Z = N
+    def sheet(bm):
+        g = []
+        for j in range(ny + 1):
+            row = []
+            for i in range(nx + 1):
+                u, v = i / nx, j / ny
+                fold = 0.018 * math.sin(2 * math.pi * (1.7 * u + 0.6 * v))      # soft diagonal folds
+                z = max(floor_z[j][i], Z[j][i] + fold)
+                row.append(bm.verts.new((x0 + (x1 - x0) * u, y0 + (y1 - y0) * v, z)))
+            g.append(row)
+        for j in range(ny):
+            for i in range(nx):
+                bm.faces.new((g[j][i], g[j][i + 1], g[j + 1][i + 1], g[j + 1][i]))
+    cloth_ob = _mesh("Blanket", [sheet], mat, room)
+    me = cloth_ob.data
+    dec = cloth_ob.modifiers.new("LowPoly", "DECIMATE")          # faceted low-poly look
+    dec.ratio = 0.35
+    sol = cloth_ob.modifiers.new("Thickness", "SOLIDIFY")
+    sol.thickness, sol.offset = 0.03, -1.0
+    for p in me.polygons:
+        p.use_smooth = False
+    return cloth_ob
 
 
 def _mesh(name, builders, material, coll, smooth=False):
@@ -294,34 +357,8 @@ def apply_sofa_set():
     # left side of her head and glasses rests snugly against its right side
     _mesh("Pillow_Cream", [_ico(tuple(PILLOW), 1.0, scale=(0.23, 0.16, 0.23), sub=2, rot=(0, 0, -35))],
           _mat("M_Pillow_Cream", hx("#E8DEC8")), room)
-    # Awake and tired: open white oval eyes, dark pupils, heavy upper lids and brows
-    for n in ("Human_EyeWhites", "Human_Eyelids", "Human_Lashes", "Human_Eyebrows"):
-        o = bpy.data.objects.get(n)
-        if o:
-            o.hide_render = o.hide_viewport = False
-    sc["lid_base"] = 0.34
-    # pupils look down and toward Claude on the coffee table
-    pupils = bpy.data.objects["Human_Pupils"]
-    target = root.matrix_world.inverted() @ (MASCOT + Vector((0, 0, 0.12)))
-    def look(ex):
-        d = target - Vector((ex, -0.18, 1.34))
-        g = Vector((d.x, d.z)).normalized() * 0.011
-        return Vector((ex + g.x, -0.183, 1.34 + g.y - 0.004))
-    pupils.location = (0, 0, -1.34)
-    parts = []
-    for ex in (0.07, -0.07):
-        c = look(ex)
-        parts.append(_ico(tuple(c), 0.017, scale=(0.8, 0.4, 1.05), sub=2))
-        parts.append(_ico(tuple(c + Vector((0.005, -0.007, 0.006))), 0.0045, scale=(1, 0.5, 1), sub=1))
-    _rebuild("Human_Pupils", parts)
-    pm = pupils.data
-    glint_r = 0.006
-    for p in pm.polygons:
-        c = p.center
-        for ex in (0.07, -0.07):
-            g = look(ex) + Vector((0.005, -0.007, 0.006))
-            if (c - g).length < glint_r and len(pm.materials) > 1:
-                p.material_index = 1
+    # Her own dot eyes, open (awake and talking)
+    sc["lid_base"] = 0.0
     # Lounging arms (rebuilt sleeves): top shoulder + bent elbow arch up over her
     # side with the forearm resting along her hip; lower arm tucked forward on the cushion
     sleeves = [_ico((sx * 0.125, -0.002, 0.95), 0.20, scale=(0.62, 0.9, 1.15), sub=2) for sx in (1, -1)]
@@ -338,10 +375,8 @@ def apply_sofa_set():
     # Throw blanket (#7D6B91) from her waist to the right armrest, over her hips and
     # legs and down over the front of the cushion; chest, arms and head stay uncovered
     waist = root.matrix_world @ Vector((0, 0, 0.72))
-    blanket = _mesh("Blanket", [throw_blanket(waist.x - 0.04, 0.86, 0.30, 0.95, SEAT_TOP, waist.y)],
-                    _mat("M_Blanket_Lavender", hx("#7D6B91"), rough=0.85), room)
-    sol = blanket.modifiers.new("Thickness", "SOLIDIFY")
-    sol.thickness, sol.offset = 0.03, -1.0
+    chest = root.matrix_world @ Vector((0, 0, 1.02))   # blanket pulled up to her chest
+    blanket = drape_blanket(room, chest, waist, sc)
     # light cream/beige rug under the coffee table
     _mesh("Rug", [_box((-0.05, -0.30, 0.005), (1.8, 1.15, 0.01), bevel=0.004)], _mat("M_Rug_Beige", hx("#D6CFC2")), room)
 
