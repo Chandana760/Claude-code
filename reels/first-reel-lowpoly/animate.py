@@ -297,6 +297,8 @@ def animate():
     eyes.location = c
 
     vis = analyze_voice()
+    pose_off = tuple(bpy.context.scene.get("head_pose_offset", (0.0, 0.0, 0.0)))   # set-specific resting pose
+    lid_base = float(bpy.context.scene.get("lid_base", 0.0))                       # tired: lids rest lower
     add_mouth_visemes()
 
     # Natural blinks for Maya (every 2.5-4.5 s) and the mascot (every 3-6 s)
@@ -383,6 +385,7 @@ def animate():
         mouth["Talk_O"].keyframe_insert("value", frame=f)
         mouth["Smile"].value = smile
         mouth["Smile"].keyframe_insert("value", frame=f)
+        lid = max(lid, lid_base)
         lids["Blink"].value = clamp(lid)
         lids["Blink"].keyframe_insert("value", frame=f)
         if dot_eyes:
@@ -391,7 +394,7 @@ def animate():
         brows.location = brow_base + Vector((0, 0, brow_dz))
         brows.keyframe_insert("location", index=2, frame=f)
         # resting pose like the reference: head turned a little and tipped down
-        head.rotation_euler = (hx + 0.07, hy + 0.06, hz - 0.12)
+        head.rotation_euler = (hx + 0.07 + pose_off[0], hy + 0.06 + pose_off[1], hz - 0.12 + pose_off[2])
         head.keyframe_insert("rotation_euler", frame=f)
 
         # ---------------- Claude mascot ----------------

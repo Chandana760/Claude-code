@@ -126,8 +126,9 @@ def _aim_cam(name, loc, target, lens, fstop, roll_deg=0.0, focus=None):
 
 
 # Layout (metres)
-HEAD = Vector((-0.38, 0.66, 0.98))     # Maya's head resting on the pillow
-TILT = -24                             # she lies on her side, head toward frame left
+PILLOW = Vector((-0.74, 0.80, 0.68))   # round cream pillow wedged into the left couch corner
+HEAD = PILLOW + Vector((0.30, -0.07, 0.20))   # her cheek rests right on the pillow (no gap)
+TILT = -40                             # she lies on her side, head toward frame left
 MASCOT = Vector((-0.24, -0.34, 0.47))  # Claude on the coffee table
 
 
@@ -181,16 +182,26 @@ def apply_sofa_set():
     root.rotation_euler = rot
     root.location = HEAD - rot.to_matrix() @ local_head
     bpy.context.view_layer.update()
-    # cream pillow under her head; purple cushion hugged against her chest (below the face)
-    pil = HEAD + Vector((-0.27, -0.01, -0.12))
-    _mesh("Pillow_Cream", [_ico(tuple(pil), 0.23, scale=(0.95, 0.78, 0.85))],
+    # cream pillow wedged into the left corner of the couch, her cheek resting on it
+    _mesh("Pillow_Cream", [_ico(tuple(PILLOW), 0.22, scale=(0.95, 0.80, 0.85))],
           _mat("M_Pillow_Cream", hx("#E8DEC8")), room)
-    # One draped low-poly blanket (#7D6B91): smooth dome over her lower body on the
-    # right of the couch with soft diagonal folds (replaces the separate puffy lumps)
-    blanket = _mesh("Blanket", [draped_blanket(HEAD.x + 0.12, 0.92, 0.28, 0.98, peak_u=0.36, height=0.52)],
-                    _mat("M_Blanket_Lavender", hx("#7D6B91"), rough=0.85), room)
-    sol = blanket.modifiers.new("Thickness", "SOLIDIFY")
-    sol.thickness, sol.offset = 0.06, -1.0
+    # tired resting pose: chin dipped toward the coffee table, lids slightly lowered
+    sc["head_pose_offset"] = (0.16, 0.0, 0.0)
+    sc["lid_base"] = 0.32
+    # Thick, cozy duvet: two large soft rounded mounds over her hips and legs on the
+    # right of the couch, decimated to ~160 flat triangles; kept behind/below her
+    # crossed arms so nothing clips.
+    mw = root.matrix_world
+    hip = mw @ Vector((0.0, 0.06, 0.42))
+    seat_top = 0.48
+    mounds = []
+    for off, rad in (((0.10, 0.02, 0.0), (0.31, 0.28, 0.24)), ((0.50, 0.06, -0.08), (0.32, 0.27, 0.21))):
+        c = hip + Vector(off)
+        c.z = max(c.z, seat_top + rad[2] * 0.55)
+        mounds.append(_ico(tuple(c), 1.0, scale=rad, sub=3))
+    blanket = _mesh("Blanket", mounds, _mat("M_Blanket_Lavender", hx("#7D6B91"), rough=0.85), room)
+    dec = blanket.modifiers.new("LowPoly", "DECIMATE")
+    dec.ratio = 160 / max(1, len(blanket.data.polygons))
     # light cream/beige rug under the coffee table
     _mesh("Rug", [_box((-0.05, -0.30, 0.005), (1.8, 1.15, 0.01), bevel=0.004)], _mat("M_Rug_Beige", hx("#D6CFC2")), room)
 
@@ -207,16 +218,27 @@ def apply_sofa_set():
     # soft warm overhead/front key (#FFE4C4) on couch, pillow and table: no harsh shadows
     _area("Key_SoftWarm", lc, (0.25, -1.55, 2.25), (-0.20, 0.45, 0.62), hx("#FFE4C4"), 300, 1.8)
     _area("Fill_RoomCool", lc, (-1.4, -1.6, 1.8), (0.0, 0.5, 0.5), (0.40, 0.48, 0.60), 35, 2.5)
-    # warm lamp glow peeking from behind the far-left armrest
+    # Side lamp on a small dark wooden end table next to the left armrest:
+    # wood table, brass base + stem, glowing shade, warm light inside the shade
+    TX, TY, TOP = -1.33, 0.92, 0.56
+    _mesh("EndTable", [_box((TX, TY, TOP - 0.015), (0.36, 0.36, 0.03), bevel=0.006)]
+          + [_box((TX + dx, TY + dy, (TOP - 0.03) / 2), (0.03, 0.03, TOP - 0.03)) for dx in (-0.15, 0.15) for dy in (-0.15, 0.15)],
+          _mat("M_EndTable_Wood", (0.05, 0.026, 0.014)), room)
+    brass = _mat("M_Lamp_Brass", (0.55, 0.36, 0.12), rough=0.45)
+    cyl = lambda loc, r, d, seg=12: (lambda bm: bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=seg,
+                                                                       radius1=r, radius2=r, depth=d,
+                                                                       matrix=Matrix.Translation(loc)))
+    _mesh("Lamp_Base", [cyl((TX, TY, TOP + 0.012), 0.08, 0.024)], brass, room)
+    _mesh("Lamp_Stem", [cyl((TX, TY, TOP + 0.17), 0.012, 0.30, 8)], brass, room)
+    _mesh("Lamp_Shade", [lambda bm: bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=10,
+                                                         radius1=0.15, radius2=0.10, depth=0.20,
+                                                         matrix=Matrix.Translation((TX, TY, TOP + 0.38)))],
+          _mat("M_LampShade_Glow", (1.0, 0.62, 0.30), emit=2.5), room)
     ld = bpy.data.lights.get("Lamp_BehindArmrest") or bpy.data.lights.new("Lamp_BehindArmrest", "POINT")
-    ld.color, ld.energy, ld.shadow_soft_size = (1.0, 0.58, 0.26), 55, 0.15
+    ld.color, ld.energy, ld.shadow_soft_size = (1.0, 0.58, 0.26), 60, 0.12
     lp = bpy.data.objects.new("Lamp_BehindArmrest", ld)
     lc.objects.link(lp)
-    lp.location = (-1.22, 1.02, 0.84)
-    _mesh("Lamp_Shade", [lambda bm: bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=10,
-                                                         radius1=0.14, radius2=0.09, depth=0.18,
-                                                         matrix=Matrix.Translation((-1.22, 1.04, 0.95)))],
-          _mat("M_LampShade_Glow", (1.0, 0.62, 0.30), emit=2.5), room)
+    lp.location = (TX, TY, TOP + 0.36)
     _area("Glow_LampBounce", lc, (0.9, 0.3, 1.0), (0.85, 1.29, 1.55), (1.0, 0.55, 0.25), 25, 0.6)
     k = bpy.data.objects.get("Key_MayaWarm")
     if k:
@@ -234,7 +256,7 @@ def apply_sofa_set():
             bg.inputs["Color"].default_value = (0.012, 0.012, 0.016, 1)
 
     # 6. Cameras (focus targets stay on the characters)
-    _aim_cam("Cam_Wide", (-0.38, -2.55, 1.02), (-0.28, 0.35, 0.60), 32, 4.0)   # wider, left armrest in view
+    _aim_cam("Cam_Wide", (-0.36, -3.90, 1.18), (-0.34, 0.30, 0.64), 45, 4.0)   # 45mm medium-wide: armrest, table, picture
     _aim_cam("Cam_Human", HEAD + Vector((0.32, -1.30, 0.10)), HEAD + Vector((0.02, 0, -0.10)), 44, 1.8, roll_deg=10)
     _aim_cam("Cam_Mascot", MASCOT + Vector((0.06, -0.88, 0.22)), MASCOT + Vector((0.02, 0, 0.16)), 45, 1.8)
 
