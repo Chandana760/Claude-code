@@ -373,16 +373,16 @@ def apply_sofa_set():
     # (right) arm lies along her side with the hand at her hip
     torso_parts = [_ico((sx * 0.125, -0.002, 0.95), 0.20, scale=(0.62, 0.9, 1.15), sub=2) for sx in (1, -1)]
     torso_parts += [_ico((0.20, 0.0, 1.06), 0.10, sub=2), _ico((-0.20, 0.0, 1.06), 0.10, sub=2)]
-    # arms tucked neatly: lower arm folded in front of her chest, upper arm lying
+    # arms relaxed: lower forearm and hand resting on the seat cushion in front of her, upper arm lying
     # straight along her side to the hip (no elbows sticking up)
     low_arm = [sleeve_tube([(-0.21, -0.03, 1.05), (-0.24, -0.12, 0.97), (-0.23, -0.19, 0.92)], 0.088, 0.08),
                _ico((-0.23, -0.195, 0.915), 0.082, sub=2),
-               sleeve_tube([(-0.22, -0.20, 0.92), (-0.17, -0.25, 0.96), (-0.11, -0.27, 1.00)], 0.074, 0.066)]
+               sleeve_tube([(-0.235, -0.21, 0.915), (-0.225, -0.26, 0.89), (-0.21, -0.29, 0.875)], 0.074, 0.066)]
     top_arm = [sleeve_tube([(0.22, -0.01, 1.06), (0.26, -0.04, 0.96), (0.27, -0.06, 0.87),
                             (0.26, -0.08, 0.80)], 0.086, 0.07)]
     _rebuild("Human_Body", torso_parts + low_arm + top_arm)
     _rebuild("Human_Hands", [_ico((0.255, -0.09, 0.765), 0.044, scale=(1.1, 0.9, 0.85), sub=2),
-                             _ico((-0.085, -0.275, 1.02), 0.044, scale=(1.1, 0.9, 0.85), sub=2)])
+                             _ico((-0.20, -0.325, 0.865), 0.044, scale=(1.1, 0.9, 0.85), sub=2)])
     hands = bpy.data.objects["Human_Hands"]
     hands.hide_render = hands.hide_viewport = False
     # 4. Single smooth draped throw (16x12 plane, Solidify 0.025) from her waist to
