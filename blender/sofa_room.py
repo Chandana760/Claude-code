@@ -301,10 +301,10 @@ def _aim_cam(name, loc, target, lens, fstop, roll_deg=0.0, focus=None):
 
 
 # Layout (metres)
-HEAD = Vector((-0.56, 0.62, 0.793))    # centre of her head, resting on top of the flat pillow
+HEAD = Vector((-0.70, 0.62, 0.974))    # centre of her head, propped on the inclined pillow
 HEAD_LOCAL_Z = 1.355                   # head-mesh centre height in her root space
-PILLOW = Vector((-0.635, 0.62, 0.53))   # flat rectangular cushion pillow on the left end of the seat
-TILT = -79                             # lying on her left side, upper body raised slightly toward the head
+PILLOW = Vector((-0.711, 0.62, 0.65))   # pillow inclined ~35 deg against the left armrest
+TILT = -55                             # half-reclined on her left side, upper body propped up on the pillow
 SEAT_TOP = 0.48
 MASCOT = Vector((-0.24, -0.34, 0.47))  # Claude on the coffee table
 
@@ -359,7 +359,7 @@ def apply_sofa_set():
     root.location = HEAD - rot.to_matrix() @ Vector((0, 0, HEAD_LOCAL_Z))
     bpy.context.view_layer.update()
     # soft rectangular throw pillow lying flat on the seat; her head and hair rest on top
-    _mesh("Pillow_Cream", [_box(tuple(PILLOW), (0.45, 0.35, 0.10), bevel=0.03)],
+    _mesh("Pillow_Cream", [_box(tuple(PILLOW), (0.45, 0.35, 0.10), bevel=0.03, rot=(0, 35, 0))],
           _mat("M_Pillow_Cream", hx("#E8DEC8")), room)
     sc["lid_base"] = 0.0
     sc["head_pose_offset"] = (R(12), 0.0, 0.0)      # head tipped forward toward the table
