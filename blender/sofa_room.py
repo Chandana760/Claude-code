@@ -37,6 +37,37 @@ def _mat(name, color, rough=0.8, emit=0.0):
     return m
 
 
+def hx(h):
+    """'#RRGGBB' (sRGB) -> linear RGB."""
+    def c(v):
+        v /= 255.0
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+    return tuple(c(int(h[i:i + 2], 16)) for i in (1, 3, 5))
+
+
+def draped_blanket(x0, x1, y0, y1, seat=0.47, peak_u=0.28, height=0.40, nx=18, ny=11):
+    """One continuous blanket sheet: a smooth dome over the lower body with 2-3
+    soft diagonal fabric folds; the front edge drapes over the seat edge."""
+    def b(bm):
+        grid = []
+        for j in range(ny + 1):
+            v = j / ny
+            row = []
+            for i in range(nx + 1):
+                u = i / nx
+                bu = math.exp(-((u - peak_u) / 0.45) ** 2)              # dome, highest near her shoulder
+                bv = math.sin(math.pi * min(1.0, 0.15 + 0.85 * v)) ** 0.6
+                fold = 0.024 * math.sin(2 * math.pi * (1.5 * u + 0.9 * v)) * bv   # diagonal folds
+                z = seat + height * bu * bv + fold - 0.07 * (1 - v) ** 3          # front edge hangs
+                row.append(bm.verts.new((x0 + (x1 - x0) * u, y0 + (y1 - y0) * v, z)))
+            grid.append(row)
+        for j in range(ny):
+            for i in range(nx):
+                bm.faces.new((grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]))
+        bmesh.ops.triangulate(bm, faces=list(bm.faces))                     # low-poly triangle facets
+    return b
+
+
 def _mesh(name, builders, material, coll, smooth=False):
     me = bpy.data.meshes.new(name)
     bm = bmesh.new()
@@ -120,15 +151,15 @@ def apply_sofa_set():
     lights = bpy.data.collections.get("Lighting")
 
     # 2. Living room: dark walls, wooden floor, framed picture, sofa, pillows, coffee table, book
-    wall = _mat("M_Room_Wall", (0.026, 0.033, 0.033))         # dark cool grey-green
+    wall = _mat("M_Room_Wall", hx("#1A2426"))                  # dark slate-teal
     floor = _mat("M_Room_Floor", (0.28, 0.18, 0.10))         # light floor that catches the warm pool
     _mesh("Room_Floor", [_box((0, 0, -0.025), (8, 8, 0.05))], floor, room)
     _mesh("Room_Walls", [_box((0, 1.35, 1.6), (8, 0.1, 3.2)), _box((-2.2, 0, 1.6), (0.1, 6, 3.2))], wall, room)
     _mesh("Room_PictureFrame", [_box((0.85, 1.29, 1.55), (0.42, 0.03, 0.56), bevel=0.006)],
-          _mat("M_Room_FrameGold", (0.75, 0.45, 0.06), rough=0.5), room)
+          _mat("M_Room_FrameWood", hx("#6E4228"), rough=0.7), room)    # warm wood frame border
     _mesh("Room_Picture", [_box((0.85, 1.27, 1.55), (0.34, 0.02, 0.48))], _mat("M_Room_Picture", (0.05, 0.04, 0.03)), room)
 
-    sofa_m = _mat("M_Sofa_Green", (0.018, 0.075, 0.068))     # teal green
+    sofa_m = _mat("M_Sofa_Green", hx("#2D5852"))              # teal-green
     _mesh("Sofa", [_box((0, 0.70, 0.22), (2.0, 0.80, 0.30), bevel=0.04),        # base
                    _box((0, 0.66, 0.42), (1.80, 0.72, 0.12), bevel=0.05),       # seat cushion
                    _box((0, 1.04, 0.70), (2.0, 0.22, 0.62), bevel=0.07),        # backrest
@@ -153,16 +184,15 @@ def apply_sofa_set():
     # cream pillow under her head; purple cushion hugged against her chest (below the face)
     pil = HEAD + Vector((-0.27, -0.01, -0.12))
     _mesh("Pillow_Cream", [_ico(tuple(pil), 0.23, scale=(0.95, 0.78, 0.85))],
-          _mat("M_Pillow_Cream", (0.75, 0.62, 0.45)), room)
-    # Big puffy blanket heaped over her shoulder and body (reference): chunky
-    # faceted lumps rising almost to her face on the right, down to the seat.
-    lumps = [_ico(tuple(HEAD + Vector(o)), r, scale=sc_, sub=2) for o, r, sc_ in (
-        ((0.36, -0.12, -0.18), 0.24, (1.20, 1.00, 1.00)),     # roll she hugs, leaning into it on the right
-        ((0.70, -0.04, -0.34), 0.25, (1.25, 1.00, 0.90)),     # spilling along the seat
-        ((0.90, 0.00, -0.46), 0.22, (1.20, 1.00, 0.75)),      # end on the armrest side
-        ((0.36, -0.30, -0.38), 0.20, (1.25, 0.85, 0.90)),     # front fold hanging over the seat edge
-    )]
-    _mesh("Blanket", lumps, _mat("M_Blanket_DustyPink", (0.55, 0.20, 0.24)), room)
+          _mat("M_Pillow_Cream", hx("#E8DEC8")), room)
+    # One draped low-poly blanket (#7D6B91): smooth dome over her lower body on the
+    # right of the couch with soft diagonal folds (replaces the separate puffy lumps)
+    blanket = _mesh("Blanket", [draped_blanket(HEAD.x + 0.12, 0.92, 0.28, 0.98, peak_u=0.36, height=0.52)],
+                    _mat("M_Blanket_Lavender", hx("#7D6B91"), rough=0.85), room)
+    sol = blanket.modifiers.new("Thickness", "SOLIDIFY")
+    sol.thickness, sol.offset = 0.06, -1.0
+    # light cream/beige rug under the coffee table
+    _mesh("Rug", [_box((-0.05, -0.30, 0.005), (1.8, 1.15, 0.01), bevel=0.004)], _mat("M_Rug_Beige", hx("#D6CFC2")), room)
 
     # 4. Claude on the coffee table
     mroot = bpy.data.objects["Mascot_Root"]
@@ -174,14 +204,19 @@ def apply_sofa_set():
         if o.name not in ("Key_MayaWarm", "Rim_MascotWarm"):
             bpy.data.objects.remove(o, do_unlink=True)
     lc = lights or room
-    # warm spotlight: a pool on the characters, table and floor; walls stay dark
-    sd = bpy.data.lights.get("Key_LampSpot") or bpy.data.lights.new("Key_LampSpot", "SPOT")
-    sd.color, sd.energy, sd.spot_size, sd.spot_blend, sd.shadow_soft_size = (1.0, 0.55, 0.25), 560, R(70), 0.6, 0.25
-    sp = bpy.data.objects.new("Key_LampSpot", sd)
-    lc.objects.link(sp)
-    sp.location = (0.75, -1.05, 2.05)
-    sp.rotation_euler = (Vector((-0.15, 0.0, 0.35)) - sp.location).to_track_quat("-Z", "Y").to_euler()
+    # soft warm overhead/front key (#FFE4C4) on couch, pillow and table: no harsh shadows
+    _area("Key_SoftWarm", lc, (0.25, -1.55, 2.25), (-0.20, 0.45, 0.62), hx("#FFE4C4"), 300, 1.8)
     _area("Fill_RoomCool", lc, (-1.4, -1.6, 1.8), (0.0, 0.5, 0.5), (0.40, 0.48, 0.60), 35, 2.5)
+    # warm lamp glow peeking from behind the far-left armrest
+    ld = bpy.data.lights.get("Lamp_BehindArmrest") or bpy.data.lights.new("Lamp_BehindArmrest", "POINT")
+    ld.color, ld.energy, ld.shadow_soft_size = (1.0, 0.58, 0.26), 55, 0.15
+    lp = bpy.data.objects.new("Lamp_BehindArmrest", ld)
+    lc.objects.link(lp)
+    lp.location = (-1.22, 1.02, 0.84)
+    _mesh("Lamp_Shade", [lambda bm: bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=10,
+                                                         radius1=0.14, radius2=0.09, depth=0.18,
+                                                         matrix=Matrix.Translation((-1.22, 1.04, 0.95)))],
+          _mat("M_LampShade_Glow", (1.0, 0.62, 0.30), emit=2.5), room)
     _area("Glow_LampBounce", lc, (0.9, 0.3, 1.0), (0.85, 1.29, 1.55), (1.0, 0.55, 0.25), 25, 0.6)
     k = bpy.data.objects.get("Key_MayaWarm")
     if k:
@@ -199,7 +234,7 @@ def apply_sofa_set():
             bg.inputs["Color"].default_value = (0.012, 0.012, 0.016, 1)
 
     # 6. Cameras (focus targets stay on the characters)
-    _aim_cam("Cam_Wide", (-0.05, -2.40, 0.98), (-0.10, 0.30, 0.56), 34, 4.0)
+    _aim_cam("Cam_Wide", (-0.38, -2.55, 1.02), (-0.28, 0.35, 0.60), 32, 4.0)   # wider, left armrest in view
     _aim_cam("Cam_Human", HEAD + Vector((0.32, -1.30, 0.10)), HEAD + Vector((0.02, 0, -0.10)), 44, 1.8, roll_deg=10)
     _aim_cam("Cam_Mascot", MASCOT + Vector((0.06, -0.88, 0.22)), MASCOT + Vector((0.02, 0, 0.16)), 45, 1.8)
 
