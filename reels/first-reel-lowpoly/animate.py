@@ -355,6 +355,11 @@ def animate():
         elif act == "sleepy":                        # eyes half closed, head sinking into the pillow
             lid = max(lid, 0.80 * fade_in)
             hx += 0.06 * fade_in
+            last_maya = [l for l in LINES if l["who"] == "M"][-1]
+            if last_m is last_maya and t > last_m["t"] + last_m["d"]:   # she drifts off: eyes close
+                drift = ease((t - last_m["t"] - last_m["d"] - 0.3) / 1.4)
+                lid = max(lid, 0.80 + 0.20 * drift)
+                hx += 0.03 * drift
         elif act == "wink":
             smile = 0.8 * fade_in
             hy = 0.14 * fade_in
@@ -379,7 +384,7 @@ def animate():
         hy -= 0.03 * math.sin(t * 0.45 + 1.0) * listen
 
         # Warm ending: she smiles at the final "Especially those."
-        if t >= LINES[-1]["t"] - 0.2 and LINES[-1].get("act") != "sleepy":
+        if t >= LINES[-1]["t"] - 0.2 and act != "sleepy":
             smile = max(smile, 0.7 * ease((t - LINES[-1]["t"] + 0.2) / 0.6))
             lid = max(lid if lid >= 0.9 else 0.0, 0.0)
 

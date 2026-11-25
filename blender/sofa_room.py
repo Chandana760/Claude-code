@@ -458,7 +458,7 @@ def apply_sofa_set():
     # her lines: over Claude - she is sharp on the pillow talking down to him, Claude soft in
     # the foreground at the bottom of frame, so it is always clear who she is talking to
     mc0 = MASCOT + Vector((0, 0, 0.12))
-    _aim_cam("Cam_Human", mc0 + Vector((0.10, -0.80, 0.12)), HEAD + Vector((0.06, 0, -0.24)), 52, 2.2, roll_deg=12,
+    _aim_cam("Cam_Human", mc0 + Vector((0.10, -0.80, 0.12)), HEAD + Vector((0.06, 0, -0.09)), 52, 2.2, roll_deg=12,   # headroom: captions sit above her hair
              focus=bpy.data.objects.get("Human_FocusTarget"))
     mc = MASCOT + Vector((0, 0, 0.12))
     _aim_cam("Cam_Mascot", mc + Vector((0.02, -0.78, 0.06)), mc + Vector((-0.10, 0.40, 0.20)), 40, 1.8,

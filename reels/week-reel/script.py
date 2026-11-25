@@ -23,4 +23,5 @@ SCRIPT = [
   ('M', "[sleepy] You have it already! Send it in the morning. [yawns] Goodnight.", 'maya', 'sleepy', 0.45),
   ('C', '[softly] Okay, good night...', 'wide', 'tilt', 0.6),
   ('M', "[drowsy, eyes half closed] Actually... send it now. [pause] Before they ask for more edits.", 'maya', 'sleepy', 1.1),
+  ('C', '[softly, hushed, gentle] Already sent. [whispers] Sleep tight.', 'claude', 'tilt', 1.0),
 ]
