@@ -154,9 +154,19 @@ def apply_sofa_set():
     pil = HEAD + Vector((-0.27, -0.01, -0.12))
     _mesh("Pillow_Cream", [_ico(tuple(pil), 0.23, scale=(0.95, 0.78, 0.85))],
           _mat("M_Pillow_Cream", (0.75, 0.62, 0.45)), room)
-    chest = root.matrix_world @ Vector((0.0, -0.20, 0.86))
-    _mesh("Cushion_Purple", [_ico(tuple(chest), 0.22, scale=(1.15, 0.6, 0.9), rot=(0, TILT * 0.5, 0))],
-          _mat("M_Cushion_Purple", (0.22, 0.12, 0.34)), room)
+    # Soft dusty-pink blanket draped over her from the chest down along the sofa
+    # (contrasts with her lavender jacket): overlapping soft lumps following her
+    # body line, plus a rolled hem at the top that her arms rest on.
+    mw = root.matrix_world
+    lumps = []
+    for k, lz in enumerate((0.90, 0.68, 0.46, 0.24, 0.02, -0.20)):
+        c = mw @ Vector((0.0, -0.13 + 0.01 * k, lz))
+        c.z = max(c.z, 0.56)                           # rests on the seat
+        lumps.append(_ico(tuple(c), 0.21 - 0.008 * k, scale=(1.25, 0.95, 0.80), rot=(0, TILT * 0.6, 0)))
+    hem_a, hem_b = mw @ Vector((-0.26, -0.24, 0.96)), mw @ Vector((0.26, -0.24, 0.80))
+    for i in range(7):
+        lumps.append(_ico(tuple(hem_a.lerp(hem_b, i / 6)), 0.065, scale=(1, 1, 1), sub=1))
+    _mesh("Blanket", lumps, _mat("M_Blanket_DustyPink", (0.55, 0.20, 0.24)), room)
 
     # 4. Claude on the coffee table
     mroot = bpy.data.objects["Mascot_Root"]
