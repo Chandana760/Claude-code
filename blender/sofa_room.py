@@ -194,22 +194,22 @@ def drape_blanket(room, chest, waist, sc):
     from mathutils.bvhtree import BVHTree
     bpy.context.view_layer.update()
     verts, polys = [], []
-    for n in ("Blanket_LegsProxy", "Sofa", "Pillow_Cream", "Human_Body", "Human_Torso", "Human_Hands", "Room_Floor"):
+    for n in ("Blanket_LegsProxy", "Sofa", "Pillow_Cream", "Blanket_BodyProxy", "Human_Torso", "Room_Floor"):
         o = bpy.data.objects[n]
         off = len(verts)
         verts += [o.matrix_world @ v.co for v in o.data.vertices]
         polys += [[off + i for i in p.vertices] for p in o.data.polygons]
     bvh = BVHTree.FromPolygons(verts, polys)
-    x0, x1, y0, y1 = chest.x, 0.90, 0.14, 1.00
+    x0, x1, y0, y1 = chest.x, 0.90, 0.22, 1.00
     nx, ny = 44, 34
     floor_z = [[0.0] * (nx + 1) for _ in range(ny + 1)]
     for j in range(ny + 1):
         for i in range(nx + 1):
             p = Vector((x0 + (x1 - x0) * i / nx, y0 + (y1 - y0) * j / ny, 2.0))
             hit = bvh.ray_cast(p, Vector((0, 0, -1)))
-            floor_z[j][i] = (hit[0].z if hit[0] else 0.0) + 0.018
+            floor_z[j][i] = (hit[0].z if hit[0] else 0.0) + 0.028
     Z = [row[:] for row in floor_z]
-    for it in range(260):                                    # fabric relaxation
+    for it in range(120):                                     # fabric relaxation (hugs her shape)
         N = [row[:] for row in Z]
         for j in range(ny + 1):
             for i in range(nx + 1):
@@ -222,7 +222,10 @@ def drape_blanket(room, chest, waist, sc):
             row = []
             for i in range(nx + 1):
                 u, v = i / nx, j / ny
+                y = y0 + (y1 - y0) * v
                 fold = 0.018 * math.sin(2 * math.pi * (1.7 * u + 0.6 * v))      # soft diagonal folds
+                if y < 0.46:                                                   # vertical drape folds on the front
+                    fold += 0.022 * (0.46 - y) / 0.24 * math.sin(2 * math.pi * 4.0 * u + 0.8)
                 z = max(floor_z[j][i], Z[j][i] + fold)
                 row.append(bm.verts.new((x0 + (x1 - x0) * u, y0 + (y1 - y0) * v, z)))
             g.append(row)
@@ -232,7 +235,7 @@ def drape_blanket(room, chest, waist, sc):
     cloth_ob = _mesh("Blanket", [sheet], mat, room)
     me = cloth_ob.data
     dec = cloth_ob.modifiers.new("LowPoly", "DECIMATE")          # faceted low-poly look
-    dec.ratio = 0.35
+    dec.ratio = 0.6
     sol = cloth_ob.modifiers.new("Thickness", "SOLIDIFY")
     sol.thickness, sol.offset = 0.03, -1.0
     for p in me.polygons:
@@ -370,24 +373,32 @@ def apply_sofa_set():
     g = Vector((d.x, 0, d.z)).normalized() * 0.008
     for v in pupils.data.vertices:
         v.co += g
-    # Lounging arms (rebuilt sleeves): top shoulder + bent elbow arch up over her
-    # side with the forearm resting along her hip; lower arm tucked forward on the cushion
-    sleeves = [_ico((sx * 0.125, -0.002, 0.95), 0.20, scale=(0.62, 0.9, 1.15), sub=2) for sx in (1, -1)]
-    sleeves += [_ico((0.20, 0.0, 1.06), 0.10, sub=2), _ico((-0.20, 0.0, 1.06), 0.10, sub=2)]
-    sleeves += [sleeve_tube([(0.22, 0.0, 1.06), (0.31, -0.02, 0.97), (0.36, -0.04, 0.87)], 0.088, 0.08),
-                _ico((0.36, -0.045, 0.86), 0.082, sub=2),                                       # top elbow
-                sleeve_tube([(0.36, -0.05, 0.85), (0.36, -0.08, 0.80), (0.34, -0.11, 0.77)], 0.074, 0.066),
-                sleeve_tube([(-0.22, 0.0, 1.06), (-0.25, -0.11, 0.97), (-0.26, -0.21, 0.90)], 0.088, 0.08),
-                _ico((-0.26, -0.215, 0.895), 0.082, sub=2),                                     # lower elbow
-                sleeve_tube([(-0.26, -0.23, 0.90), (-0.29, -0.29, 0.96), (-0.30, -0.33, 1.02)], 0.074, 0.066)]
-    _rebuild("Human_Body", sleeves)
-    _rebuild("Human_Hands", [_ico((0.335, -0.13, 0.745), 0.044, scale=(1.1, 0.9, 0.85), sub=2),
-                             _ico((-0.30, -0.345, 1.06), 0.044, scale=(1.1, 0.9, 0.85), sub=2)])
-    # Throw blanket (#7D6B91) from her waist to the right armrest, over her hips and
-    # legs and down over the front of the cushion; chest, arms and head stay uncovered
+    # Lounging arms (rebuilt sleeves): the top shoulder shrugs up and forward with
+    # the bent elbow arching OVER the blanket's top edge; the lower arm and hand are
+    # tucked down in front of her belly, under the blanket
+    torso_parts = [_ico((sx * 0.125, -0.002, 0.95), 0.20, scale=(0.62, 0.9, 1.15), sub=2) for sx in (1, -1)]
+    torso_parts += [_ico((0.20, 0.0, 1.06), 0.10, sub=2), _ico((-0.20, 0.0, 1.06), 0.10, sub=2)]
+    top_arm = [sleeve_tube([(0.23, -0.02, 1.07), (0.35, -0.07, 1.01), (0.43, -0.11, 0.92)], 0.090, 0.082),
+               _ico((0.43, -0.115, 0.91), 0.084, sub=2),                                       # top elbow
+               sleeve_tube([(0.43, -0.12, 0.90), (0.41, -0.15, 0.84), (0.37, -0.17, 0.79)], 0.074, 0.066)]
+    low_arm = [sleeve_tube([(-0.22, -0.02, 1.05), (-0.25, -0.13, 0.95), (-0.24, -0.20, 0.86)], 0.088, 0.08),
+               _ico((-0.24, -0.205, 0.855), 0.082, sub=2),                                      # lower elbow
+               sleeve_tube([(-0.23, -0.21, 0.85), (-0.17, -0.23, 0.79), (-0.10, -0.22, 0.75)], 0.074, 0.066)]
+    top_hand = [_ico((0.365, -0.185, 0.765), 0.044, scale=(1.1, 0.9, 0.85), sub=2)]
+    low_hand = [_ico((-0.07, -0.22, 0.74), 0.044, scale=(1.1, 0.9, 0.85), sub=2)]
+    _rebuild("Human_Body", torso_parts + top_arm + low_arm)
+    _rebuild("Human_Hands", top_hand + low_hand)
+    # blanket collision shape: everything under the blanket (torso + tucked lower arm),
+    # but NOT the top arm, which rests on top of it
+    proxy = _mesh("Blanket_BodyProxy", torso_parts + low_arm + low_hand, _mat("M_Proxy", (0, 0, 0)), room)
+    proxy.parent = root
+    bpy.context.view_layer.update()
+    # Throw blanket (#7D6B91): from mid-ribcage (just under the collarbone) to the
+    # right armrest, over her waist, hips and legs and down the front of the cushion
     waist = root.matrix_world @ Vector((0, 0, 0.72))
-    chest = root.matrix_world @ Vector((0, 0, 1.02))   # blanket pulled up to her chest
-    blanket = drape_blanket(room, waist + Vector((0.19, 0, 0)), waist, sc)   # top edge just below her waist
+    chest = root.matrix_world @ Vector((0, 0, 1.0))
+    blanket = drape_blanket(room, chest, waist, sc)
+    bpy.data.objects.remove(proxy, do_unlink=True)
     # light cream/beige rug under the coffee table
     _mesh("Rug", [_box((-0.05, -0.30, 0.005), (1.8, 1.15, 0.01), bevel=0.004)], _mat("M_Rug_Beige", hx("#D6CFC2")), room)
 
