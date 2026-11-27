@@ -34,9 +34,6 @@ SCRIPT = [
 STABILITY = {0: 0.0, 4: 0.0, 6: 0.0, 8: 0.0, 12: 0.0, 14: 0.0, 16: 0.0, 18: 0.0, 20: 0.0, 22: 0.0, 24: 0.0, 25: 0.0}
 # camera moves: (line index, camera, lens at start, lens at end) - the ending pulls back like the reference
 CAM_MOVES = [(25, 'Cam_Wide', 30, 25)]
-# dusk sky like the reference: warm peach horizon up into soft blue (bottom -> top)
-SKY_STOPS = [(0.52, (1.00, 0.42, 0.12)), (0.61, (1.00, 0.33, 0.32)), (0.70, (0.42, 0.36, 0.88)), (0.80, (0.08, 0.20, 0.85))]
-EXPOSURE = -1.1
 
 # camera framing matched to the reference reel: (location, aim point, lens mm, f-stop)
 CAMS = {"Cam_Human": ((0.34, -0.80, 1.36), (0.46, 0.50, 1.41), 42, 1.8),    # tight chest-up close-up, eye level
