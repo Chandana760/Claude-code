@@ -290,8 +290,12 @@ def build_human(C):
         _sb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
     cloth = mat("M_Char_Outfit", OUTFITS[OUTFIT])
     cloth_dark = mat("M_Char_OutfitTrim", tuple(c * 0.7 for c in OUTFITS[OUTFIT]))
-    hair = mat("M_Char_Hair", hex_linear("#2A1B14"))      # rich dark espresso brown: facets catch the light
-    _principled(hair).inputs["Roughness"].default_value = 0.75
+    if os.environ.get("HAIR_FRAME") == "1":               # sofa-set variant only: espresso brown
+        hair = mat("M_Char_Hair", hex_linear("#2A1B14"))
+        _principled(hair).inputs["Roughness"].default_value = 0.75
+    else:                                                 # her standard look: near-black (reference)
+        hair = mat("M_Char_Hair", (0.008, 0.006, 0.006))
+        _principled(hair).inputs["Roughness"].default_value = 0.65  # soft highlight, no plastic sheen
     ink = mat("M_Char_FaceInk", (0.03, 0.03, 0.04))
     white = mat("M_Char_EyeWhite", (0.95, 0.95, 0.93))
     frame_col = {"big": (0.008, 0.008, 0.01), "round": (0.06, 0.05, 0.07)}.get(GLASSES, (0.12, 0.06, 0.05))
@@ -583,8 +587,8 @@ def build_human(C):
                              Vector((sx * (abs(p.x) - 0.070 + dx), p.y - 0.055 + dy, HZ - 0.25))]
                     hair_parts += hair_lock(top + cheek, 0.05, 0.02, seg=6, normal_from=hc, flat=(2.0, 0.7), tip=0.3)
         # fringe: from the front of the part, forward and down over the forehead
-        # soft parted bangs: two side-swept groups from the centre part, framing forehead and cheeks
-        bangs = ((-38, 0.10), (-52, 0.20), (-67, 0.32), (-113, 0.32), (-128, 0.20), (-142, 0.10))
+        # her standard fringe (parted in the middle, falling to the glasses)
+        bangs = ((-52, 0.24), (-66, 0.32), (-79, 0.40), (-101, 0.40), (-114, 0.32), (-128, 0.24))
         if framing:            # clean middle part: bangs sweep to the sides, centre of the forehead clear
             bangs = ((-28, 0.06), (-42, 0.14), (-56, 0.24), (-124, 0.24), (-138, 0.14), (-152, 0.06))
         for az_deg, el in bangs:
