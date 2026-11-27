@@ -1,0 +1,7 @@
+music_soft.wav
+audio.wav
+frames*/
+render*.log
+__pycache__/
+*.blend1
+vo3_old/

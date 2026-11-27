@@ -216,6 +216,67 @@ def add_mouth_visemes():
     make("Talk_O", round_o)
 
 
+def add_arm_poses():
+    """Desk set: shape keys that lift her top forearm + hand off the desk.
+    Arm_Chin  - hand up at her cheek/chin (thinking, listening)
+    Arm_Raise - hand raised in front of her chest (gesturing while talking)
+    Only the pose changes; the sleeve, hand and outfit stay exactly the same."""
+    if bpy.context.scene.get("set", "desk") != "desk":
+        return False
+    body, hands = bpy.data.objects["Human_Body"], bpy.data.objects["Human_Hands"]
+    if body.data.shape_keys and "Arm_Chin" in body.data.shape_keys.key_blocks:
+        return True
+    E = Vector((-0.27, -0.22, 0.87))          # elbow of the top forearm (root space)
+    H = Vector((0.175, -0.345, 0.905))        # its hand
+    L0, L1 = Vector((0.27, -0.21, 0.83)), Vector((-0.11, -0.30, 0.85))   # lower forearm (stays put)
+
+    import bmesh as _bm
+
+    def piece(ob, near, along=None):
+        """Vertex indices of the loose mesh piece (one sleeve tube / one hand) at `near`."""
+        bm = _bm.new(); bm.from_mesh(ob.data); bm.verts.ensure_lookup_table()
+        seen, best = set(), None
+        for v in bm.verts:
+            if v.index in seen:
+                continue
+            comp, stack = [], [v]
+            seen.add(v.index)
+            while stack:
+                x = stack.pop(); comp.append(x.index)
+                for e in x.link_edges:
+                    o = e.other_vert(x)
+                    if o.index not in seen:
+                        seen.add(o.index); stack.append(o)
+            c = sum((bm.verts[i].co for i in comp), Vector()) / len(comp)
+            score = (c - near).length
+            if along is not None:      # the tube must run along the forearm direction
+                ext = max((bm.verts[i].co - c).dot(along) for i in comp)
+                score += 0.0 if ext > 0.15 else 1.0
+            if best is None or score < best[0]:
+                best = (score, set(comp))
+        bm.free()
+        return best[1]
+
+    fore = piece(body, (E + H) / 2, (H - E).normalized())
+    hand_v = piece(hands, H)
+
+    def pose(target):
+        q = (H - E).rotation_difference(target - E)
+        return lambda p: E + q @ (p - E)          # rigid swing about the elbow: sleeve keeps its shape
+
+    for ob, sel in ((body, fore), (hands, hand_v)):
+        if not ob.data.shape_keys:
+            ob.shape_key_add(name="Basis", from_mix=False)
+        basis = [v.co.copy() for v in ob.data.vertices]
+        for name, target in (("Arm_Chin", Vector((0.115, -0.27, 1.19))),
+                             ("Arm_Raise", Vector((0.23, -0.50, 1.10)))):
+            kb = ob.shape_key_add(name=name, from_mix=False)
+            mv = pose(target)
+            for i, c in enumerate(basis):
+                kb.data[i].co = mv(c) if i in sel else c
+    return True
+
+
 def style_for_episode():
     """Reference-style tweaks: darker, smaller mouth; tighter close-up on Maya;
     shallow depth of field so the window lights turn into big bokeh."""
@@ -303,6 +364,8 @@ def animate():
     pose_off = tuple(bpy.context.scene.get("head_pose_offset", (0.0, 0.0, 0.0)))   # set-specific resting pose
     lid_base = float(bpy.context.scene.get("lid_base", 0.0))                       # tired: lids rest lower
     add_mouth_visemes()
+    arms = add_arm_poses()
+    arm_keys = [o.data.shape_keys.key_blocks for o in (bpy.data.objects['Human_Body'], bpy.data.objects['Human_Hands'])] if arms else []
 
     # Natural blinks for Maya (every 2.5-4.5 s) and the mascot (every 3-6 s)
     rnd = random.Random(7)
@@ -352,6 +415,10 @@ def animate():
             talk = clamp(talk + 0.25 * fade_in) if ml else talk
         elif act == "thinking":
             hx, hy, hz = -0.07 * fade_in, -0.14 * fade_in, 0.10 * fade_in
+        elif act == "chin":                          # cheek resting on her hand
+            hy, hz = 0.10 * fade_in, -0.05 * fade_in
+        elif act == "gesture":
+            hx = -0.03 * fade_in
         elif act == "sleepy":                        # eyes half closed, head sinking into the pillow
             lid = max(lid, 0.80 * fade_in)
             hx += 0.06 * fade_in
@@ -396,6 +463,23 @@ def animate():
         mouth["Talk_O"].keyframe_insert("value", frame=f)
         mouth["Smile"].value = smile
         mouth["Smile"].keyframe_insert("value", frame=f)
+        if arm_keys:
+            # chin: hand rests at her cheek while the 'chin' line and Claude's reply play;
+            # gesture: hand lifts while she talks, then settles back to the desk
+            chin = fade_in if act == "chin" else 0.0
+            raise_ = 0.0
+            if act == "gesture" and last_m:
+                end = last_m["t"] + last_m["d"]
+                raise_ = fade_in * (1 - ease((t - end) / 0.5)) if t > end else fade_in
+                raise_ *= 1 + 0.08 * math.sin(t * 5.0) * (1 if ml else 0)     # small beat while speaking
+            prev = last_m and LINES.index(last_m) > 0 and [l for l in LINES[:LINES.index(last_m)] if l["who"] == "M"]
+            if prev and prev[-1]["act"] == "chin" and act != "chin" and since < 0.5:   # ease the hand back down
+                chin = max(chin, 1 - ease(since / 0.5))
+            for kb in arm_keys:
+                kb["Arm_Chin"].value = clamp(chin)
+                kb["Arm_Chin"].keyframe_insert("value", frame=f)
+                kb["Arm_Raise"].value = clamp(raise_)
+                kb["Arm_Raise"].keyframe_insert("value", frame=f)
         lid = max(lid, lid_base)
         lids["Blink"].value = clamp(lid)
         lids["Blink"].keyframe_insert("value", frame=f)
