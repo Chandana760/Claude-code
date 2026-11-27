@@ -24,13 +24,13 @@ SCRIPT = [
   ('M', "[softly, smiling] Okay. It's good.", 'maya', 'wink', 0.5),
   ('C', "[happily] It's great.", 'claude', 'bounce', 0.35),
   ('M', "[squinting at the screen, hesitant] The logo is slightly too low.", 'wide', 'thinking', 0.8),
-  ('C', "[tired disbelief, slow] It's... 1 AM.", 'claude', 'look-away', 0.4),
+  ('C', "[deadpan, quick, matter-of-fact] It's 1 AM.", 'claude', 'look-away', 0.35),
   ('M', "[pleading, insistent, dragging it out] Three pixels, Claude.", 'maya', 'worried', 0.35),
   ('C', "[frustrated, worked up, playful] You said it's GOOD.", 'claude', 'excited', 0.45),
 ]
 
 # lines voiced with ElevenLabs v3 'Creative' stability for stronger emotion
-STABILITY = {1: 0.0, 12: 0.0, 20: 0.0, 21: 0.0, 22: 0.0, 23: 0.0}
+STABILITY = {1: 0.0, 12: 0.0, 20: 0.0, 21: 0.5, 22: 0.0, 23: 0.0}
 
 # on-screen text exactly as scripted where the voiced text adds emphasis
 CAPTIONS = {21: "It's 1 AM.", 23: "You said it's good."}
