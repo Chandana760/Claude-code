@@ -9,6 +9,8 @@ framing and poses may change between episodes. Any set-specific tweak (e.g. the 
 set's `HAIR_FRAME` / `HAIR_FALL`) must stay gated to that set and never leak into the
 standard look.
 
+Reference reels are for camera angles, shot pattern and pacing only (keep our own sky,
+set and look - matching the reference's background feels like a copy).
 Reference reels are for pacing, shot types and framing ideas only: build our own scene
 with our characters, never copy the reference's characters, layout or look.
 
