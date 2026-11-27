@@ -1,5 +1,24 @@
 # Reel playbook (from the reference account's 40 latest reels)
 
+## Character lock (never change)
+
+Maya and Claude look identical in every episode. Never change her face, hair (near-black,
+sleek, middle-parted fringe to the glasses), glasses, lavender open jacket + dark tee,
+hands, or Claude's shape, colour and eyes. Only the background / set, props, camera
+framing and poses may change between episodes. Any set-specific tweak (e.g. the sofa
+set's `HAIR_FRAME` / `HAIR_FALL`) must stay gated to that set and never leak into the
+standard look.
+
+Reference reels are for pacing, shot types and framing ideas only: build our own scene
+with our characters, never copy the reference's characters, layout or look.
+
+## Captions (Instagram-safe)
+
+Caption pills sit at y = 290 px (`CAP_Y` in make_reel.py): below the Reels header and
+inside the 3:4 profile-grid crop (which cuts 240 px off the top and bottom of a
+1080x1920 reel). Frame every shot with enough headroom that captions sit on the
+background, not on faces.
+
 ## Content buckets
 Ranked by plays in the scraped dataset.
 
