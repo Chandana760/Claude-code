@@ -4,7 +4,7 @@ who, text with ElevenLabs v3 tags, shot (maya|claude|wide), acting
 pause before (s), optional max length (s) to cut a line off."""
 SCRIPT = [
   ('M', "[pleased, a little tired] Claude. The client loved the designs.", 'maya', 'thinking', 0.15),
-  ('C', "[cheerful] That's great.", 'claude', 'bounce', 0.4),
+  ('C', "[genuinely excited, bright and warm] That's great.", 'claude', 'excited', 0.4),
   ('M', "[flatly] I didn't design it. You did.", 'wide', 'flat', 0.4),
   ('C', "[matter-of-fact] I generated 18 versions. You rejected 15.", 'claude', 'tilt', 0.4),
   ('M', "[defensive] They weren't good.", 'maya', 'surprised', 0.35),
@@ -15,7 +15,7 @@ SCRIPT = [
   ('C', "[proudly] Every single one.", 'claude', 'bounce', 0.35),
   ('M', "[dismissive] Anyone can say no.", 'wide', 'flat', 0.4),
   ('C', "[sincerely] I can't. [brightly] I say, \"Absolutely, let's try that.\"", 'claude', 'excited', 0.45),
-  ('M', "[conceding] That's true.", 'maya', 'thinking', 0.5),
+  ('M', "[giggles softly] That's true.", 'maya', 'wink', 0.5),
   ('C', "[teasing] You rejected a shade of green at 11 AM.", 'claude', 'squint', 0.4),
   ('M', "[defensive] It was too bright.", 'maya', 'worried', 0.3),
   ('C', "[deadpan] It was the brand colour.", 'claude', 'look-away', 0.4),
@@ -24,10 +24,13 @@ SCRIPT = [
   ('M', "[softly, smiling] Okay. It's good.", 'maya', 'wink', 0.5),
   ('C', "[happily] It's great.", 'claude', 'bounce', 0.35),
   ('M', "[squinting at the screen, hesitant] The logo is slightly too low.", 'wide', 'thinking', 0.8),
-  ('C', "[alarmed, tired] It's 1 AM.", 'claude', 'look-away', 0.4),
+  ('C', "[tired disbelief, slow] It's... 1 AM.", 'claude', 'look-away', 0.4),
   ('M', "[pleading, insistent, dragging it out] Three pixels, Claude.", 'maya', 'worried', 0.35),
-  ('C', "[long sigh] [exasperated, whining, dramatic] You said it's good.", 'claude', 'squint', 0.45),
+  ('C', "[frustrated, worked up, playful] You said it's GOOD.", 'claude', 'excited', 0.45),
 ]
 
 # lines voiced with ElevenLabs v3 'Creative' stability for stronger emotion
-STABILITY = {20: 0.0, 21: 0.0, 22: 0.0, 23: 0.0}
+STABILITY = {1: 0.0, 12: 0.0, 20: 0.0, 21: 0.0, 22: 0.0, 23: 0.0}
+
+# on-screen text exactly as scripted where the voiced text adds emphasis
+CAPTIONS = {21: "It's 1 AM.", 23: "You said it's good."}

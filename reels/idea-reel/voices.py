@@ -27,7 +27,8 @@ SCRIPT = [  # [tags] are ElevenLabs v3 delivery cues; captions show the text wit
 if os.path.exists('script.py'):  # an episode folder can bring its own script (run from that folder)
     import importlib.util; _sp = importlib.util.spec_from_file_location('ep_script', 'script.py')
     _m = importlib.util.module_from_spec(_sp); _sp.loader.exec_module(_m); SCRIPT = _m.SCRIPT
-STABILITY = getattr(_m, 'STABILITY', {}) if '_m' in dir() else {}   # per-line: 0.0 = most expressive (v3 Creative)
+STABILITY = getattr(_m, 'STABILITY', {}) if '_m' in dir() else {}
+CAPTIONS = getattr(_m, 'CAPTIONS', {}) if '_m' in dir() else {}   # per-line caption text when the spoken text differs   # per-line: 0.0 = most expressive (v3 Creative)
 CAPTION = lambda t: re.sub(r'\s+', ' ', re.sub(r'\[[^\]]*\]', '', t)).strip()
 SR = 44100
 os.makedirs('vo3', exist_ok=True)
@@ -54,7 +55,7 @@ for i, (who, text, shot, act, pause, *cut) in enumerate(SCRIPT):
     hop = SR // FPS
     env = np.array([np.sqrt(np.mean(a[k:k + hop] ** 2)) for k in range(0, len(a), hop)])
     env = np.clip(env / (env.max() or 1) * 1.25, 0, 1)
-    lines.append({'t': round(t, 3), 'd': round(d, 3), 'who': who, 'text': CAPTION(text), 'shot': shot, 'act': act, 'env': [round(float(e), 3) for e in env]})
+    lines.append({'t': round(t, 3), 'd': round(d, 3), 'who': who, 'text': CAPTIONS.get(i, CAPTION(text)), 'shot': shot, 'act': act, 'env': [round(float(e), 3) for e in env]})
     clips.append((t, a)); t += d
 total = round(t + 0.9, 2)
 mix = np.zeros(int(total * SR) + SR, np.float32)
