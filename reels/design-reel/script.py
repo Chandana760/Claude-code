@@ -23,8 +23,11 @@ SCRIPT = [
   ('C', "[gently] It was the wrong green. [warmly] Knowing that is the job.", 'claude', 'tilt', 0.5),
   ('M', "[softly, smiling] Okay. It's good.", 'maya', 'wink', 0.5),
   ('C', "[happily] It's great.", 'claude', 'bounce', 0.35),
-  ('M', "[squinting at the screen] The logo is slightly too low.", 'wide', 'thinking', 0.8),
-  ('C', "[tired, flat] It's 1 AM.", 'claude', 'look-away', 0.4),
-  ('M', "[insisting] Three pixels, Claude.", 'maya', 'worried', 0.35),
-  ('C', "[exasperated but gentle] You said it's good.", 'claude', 'squint', 0.4),
+  ('M', "[squinting at the screen, hesitant] The logo is slightly too low.", 'wide', 'thinking', 0.8),
+  ('C', "[alarmed, tired] It's 1 AM.", 'claude', 'look-away', 0.4),
+  ('M', "[pleading, insistent, dragging it out] Three pixels, Claude.", 'maya', 'worried', 0.35),
+  ('C', "[long sigh] [exasperated, whining, dramatic] You said it's good.", 'claude', 'squint', 0.45),
 ]
+
+# lines voiced with ElevenLabs v3 'Creative' stability for stronger emotion
+STABILITY = {20: 0.0, 21: 0.0, 22: 0.0, 23: 0.0}

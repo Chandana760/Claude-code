@@ -27,6 +27,7 @@ SCRIPT = [  # [tags] are ElevenLabs v3 delivery cues; captions show the text wit
 if os.path.exists('script.py'):  # an episode folder can bring its own script (run from that folder)
     import importlib.util; _sp = importlib.util.spec_from_file_location('ep_script', 'script.py')
     _m = importlib.util.module_from_spec(_sp); _sp.loader.exec_module(_m); SCRIPT = _m.SCRIPT
+STABILITY = getattr(_m, 'STABILITY', {}) if '_m' in dir() else {}   # per-line: 0.0 = most expressive (v3 Creative)
 CAPTION = lambda t: re.sub(r'\s+', ' ', re.sub(r'\[[^\]]*\]', '', t)).strip()
 SR = 44100
 os.makedirs('vo3', exist_ok=True)
@@ -34,7 +35,7 @@ os.makedirs('vo3', exist_ok=True)
 def tts(i, who, text):
     path = f'vo3/{i:02d}_{who}.mp3'
     if not os.path.exists(path):
-        body = json.dumps({'text': text, 'model_id': 'eleven_v3', 'voice_settings': {'stability': 0.5}}).encode()
+        body = json.dumps({'text': text, 'model_id': 'eleven_v3', 'voice_settings': {'stability': STABILITY.get(i, 0.5)}}).encode()
         req = urllib.request.Request(f'https://api.elevenlabs.io/v1/text-to-speech/{VOICES[who]}?output_format=mp3_44100_128',
                                      data=body, headers={'xi-api-key': 'proxy-injected', 'Content-Type': 'application/json'})
         open(path, 'wb').write(urllib.request.urlopen(req).read())
