@@ -224,7 +224,7 @@ def style_for_episode():
         bsdf = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
         bsdf.inputs["Base Color"].default_value = (0.07, 0.015, 0.02, 1)
     cams = {"Cam_Human": ((0.22, -0.98, 1.40), (0.45, 0.45, 1.27), 36, 1.6),   # headroom for captions
-            "Cam_Mascot": ((0.06, -1.02, 0.98), (0.14, -0.20, 0.89), 45, 1.6),
+            "Cam_Mascot": ((0.06, -1.02, 0.98), (0.14, -0.20, 0.85), 45, 1.6),   # her face sits above the caption band
             "Cam_Wide": ((-0.02, -1.85, 1.16), (0.04, 0.30, 1.03), 35, 2.8)}   # tighter, desk-level, monitor in frame (reference)
     if bpy.context.scene.get("set", "desk") != "desk":
         return                                  # the alternate set placed its own cameras

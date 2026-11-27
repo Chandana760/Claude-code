@@ -17,6 +17,7 @@ EP_DIR = os.path.abspath(sys.argv[3]) if len(sys.argv) > 3 else os.path.normpath
 FRAMES = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "frames")
 OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "first-reel-lowpoly.mp4")
 W, H = 1080, 1920
+CAP_Y = int(os.environ.get("CAP_Y", "290"))
 FONT = ImageFont.truetype("/usr/share/fonts/opentype/inter/Inter-Bold.otf", 36)
 
 lines = json.load(open(os.path.join(EP_DIR, "lines.json")))["lines"]
@@ -44,7 +45,9 @@ for i, l in enumerate(lines):
     lh = 50
     tw = max(d.textlength(r, font=FONT) for r in rows)
     pw, ph = tw + 56, lh * len(rows) + 30
-    x0, y0 = (W - pw) / 2, 150
+    # Instagram-safe: below the Reels header and inside the 3:4 profile-grid crop
+    # (the grid cuts 240 px off the top of a 1080x1920 reel)
+    x0, y0 = (W - pw) / 2, CAP_Y
     d.rounded_rectangle((x0, y0, x0 + pw, y0 + ph), radius=18, fill=(28, 28, 38, 190))
     for k, r in enumerate(rows):
         d.text((W / 2, y0 + 15 + lh * k + lh / 2), r, font=FONT, fill="white", anchor="mm")
