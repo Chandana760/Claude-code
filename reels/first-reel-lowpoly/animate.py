@@ -289,6 +289,12 @@ def style_for_episode():
             "Cam_Wide": ((-0.02, -1.85, 1.16), (0.04, 0.30, 1.03), 35, 2.8)}   # tighter, desk-level, monitor in frame (reference)
     if bpy.context.scene.get("set", "desk") != "desk":
         return                                  # the alternate set placed its own cameras
+    sp = os.path.join(EP_DIR, "script.py")     # an episode can frame its own shots (CAMS in script.py)
+    if os.path.exists(sp):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("ep_cams", sp)
+        mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+        cams.update(getattr(mod, "CAMS", {}))
     for name, (loc, tgt, lens, fstop) in cams.items():
         cam = bpy.data.objects[name]
         cam.location = loc
