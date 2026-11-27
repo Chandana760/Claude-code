@@ -322,6 +322,13 @@ def animate():
 
     # Camera cuts + slow push-in (lens +5% across each shot)
     sc.timeline_markers.clear()
+    moves = {}
+    sp = os.path.join(EP_DIR, "script.py")
+    if os.path.exists(sp):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("ep_moves", sp)
+        mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+        moves = {i: (a, b) for i, _cam, a, b in getattr(mod, "CAM_MOVES", [])}
     segs = []
     for i, l in enumerate(LINES):
         start = 1 if i == 0 else int(round((l["t"] - CUT_LEAD) * FPS)) + 1
@@ -333,10 +340,16 @@ def animate():
         m.camera = cam
         base = cam.get("base_lens") or cam.data.lens
         cam["base_lens"] = base
-        cam.data.lens = base
+        lens0, lens1 = base, base * 1.05
+        if i in moves:                            # episode-specific move (e.g. the ending pulls back)
+            lens0, lens1 = moves[i]
+        cam.data.lens = lens0
         cam.data.keyframe_insert("lens", frame=start)
-        cam.data.lens = base * 1.05
+        cam.data.lens = lens1
         cam.data.keyframe_insert("lens", frame=end)
+        if i in moves:                            # hold the camera's normal lens on its other shots
+            cam.data.lens = base
+            cam.data.keyframe_insert("lens", frame=start - 1)
     sc.camera = bpy.data.objects[SHOT_CAM[segs[0][1]]]
 
     head = bpy.data.objects["Human_Head"]
