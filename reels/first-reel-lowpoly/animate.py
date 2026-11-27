@@ -295,6 +295,17 @@ def style_for_episode():
         spec = importlib.util.spec_from_file_location("ep_cams", sp)
         mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
         cams.update(getattr(mod, "CAMS", {}))
+        sky = bpy.data.materials.get("M_TwilightSky")
+        stops = getattr(mod, "SKY_STOPS", None)     # (position, (r, g, b)) bottom -> top
+        if sky and stops:
+            ramp = next(n for n in sky.node_tree.nodes if n.type == "VALTORGB").color_ramp
+            while len(ramp.elements) > 1:
+                ramp.elements.remove(ramp.elements[-1])
+            ramp.elements[0].position, ramp.elements[0].color = stops[0][0], (*stops[0][1], 1)
+            for pos, col in stops[1:]:
+                ramp.elements.new(pos).color = (*col, 1)
+        if hasattr(mod, "EXPOSURE"):
+            bpy.context.scene.view_settings.exposure = mod.EXPOSURE
     for name, (loc, tgt, lens, fstop) in cams.items():
         cam = bpy.data.objects[name]
         cam.location = loc
@@ -485,7 +496,10 @@ def animate():
         if arm_keys:
             # chin: hand rests at her cheek while the 'chin' line and Claude's reply play;
             # gesture: hand lifts while she talks, then settles back to the desk
-            chin = fade_in if act == "chin" else 0.0
+            chin = 0.0
+            if act == "chin" and last_m:
+                end = last_m["t"] + last_m["d"]
+                chin = fade_in * (1 - ease((t - end - 0.3) / 0.6)) if t > end + 0.3 else fade_in
             raise_ = 0.0
             if act == "gesture" and last_m:
                 end = last_m["t"] + last_m["d"]
