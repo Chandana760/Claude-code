@@ -1,3 +1,4 @@
 frames*/
 render_part*.log
 __pycache__/
+board_blank.png
