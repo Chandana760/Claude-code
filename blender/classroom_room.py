@@ -202,8 +202,8 @@ def build_chair(root, coll):
     seat = [_box((0, 0.06, 0.505), (0.50, 0.46, 0.08), bevel=0.035),               # padded seat
             _box((0, -0.16, 0.49), (0.48, 0.06, 0.06), bevel=0.025, rot=(-25, 0, 0))]  # waterfall front edge
     back = []
-    for k, (y, z, h, tilt) in enumerate(((0.22, 0.66, 0.16, -2), (0.24, 0.80, 0.16, -8), (0.265, 0.95, 0.18, -14))):
-        back.append(_box((0, y, z), (0.46 - 0.02 * k, 0.07, h), bevel=0.03, rot=(tilt, 0, 0)))   # lumbar -> upper back curve
+    for k, (y, z, h, tilt) in enumerate(((0.23, 0.66, 0.17, -2), (0.25, 0.82, 0.17, -6), (0.27, 0.98, 0.18, -10), (0.29, 1.12, 0.12, -12))):
+        back.append(_box((0, y, z), (0.52 - 0.02 * k, 0.08, h), bevel=0.03, rot=(tilt, 0, 0)))   # lumbar -> upper back curve
     _mesh("Maya_Chair_Cushions", seat + back, up, coll, parent=root)
     parts = [_cyl((0, 0.06, 0.46), (0, 0.06, 0.16), 0.03),                          # gas lift
              _cyl((0, 0.06, 0.16), (0, 0.06, 0.10), 0.045),
@@ -350,11 +350,23 @@ def apply_classroom_set():
     cloth = bpy.data.materials.get("M_Char_Outfit")
     if cloth:
         def jacket_body(bm):
-            vs = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=0.20,
-                                            matrix=Matrix.LocRotScale(Vector((0, 0.01, 0.90)), None,
-                                                                      Vector((1.22, 0.94, 1.30))))["verts"]
-            cut = [v for v in vs if v.co.z < 0.58 or v.co.z > 1.10 or (v.co.y < -0.12 and abs(v.co.x) < 0.10 and v.co.z > 0.66)]
-            bmesh.ops.delete(bm, geom=cut, context="VERTS")
+            """Tailored jacket body: elliptical rings lofted waist -> chest -> shoulders,
+            open over the tee at the front, flat facets like the rest of her jacket."""
+            rings_def = ((0.60, 0.185, 0.150, 0.030), (0.70, 0.215, 0.165, 0.020), (0.84, 0.245, 0.185, 0.010),
+                         (0.98, 0.250, 0.180, 0.000), (1.09, 0.215, 0.150, 0.000), (1.15, 0.150, 0.110, 0.000))
+            seg = 16
+            rings = []
+            for z, rx, ry, yc in rings_def:
+                rings.append([bm.verts.new((rx * math.sin(2 * math.pi * k / seg), yc + ry * math.cos(2 * math.pi * k / seg), z))
+                              for k in range(seg)])
+            front = {k for k in range(seg) if abs(((k * 360 / seg) % 360) - 180) < 30}    # open front (angle 180 = -y)
+            for r in range(len(rings) - 1):
+                for k in range(seg):
+                    k2 = (k + 1) % seg
+                    if r >= 1 and (k in front and k2 in front):
+                        continue
+                    bm.faces.new((rings[r][k], rings[r][k2], rings[r + 1][k2], rings[r + 1][k]))
+            bm.faces.new(list(reversed(rings[0])))
         _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)   # faceted like the rest of her jacket
     build_chair(root, chars)
     sc["head_pose_offset"] = (R(-8), 0.0, R(30))        # chin up a touch, eyes on the board (cancels the desk-set turn)
