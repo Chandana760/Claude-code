@@ -101,3 +101,9 @@ Keep the defaults as above and note any per-episode change in that episode's `sc
 4. `python3 ../first-reel-lowpoly/animate.py -- --ep . --blend episode.blend`
 5. `python3 ../first-reel-lowpoly/animate.py -- --ep . --frames frames --step 2` (render; resumable)
 6. `python3 ../first-reel-lowpoly/make_reel.py frames <out.mp4> .`
+
+## Classroom set renders
+
+Faceted characters show crack-like jagged edges when rendered tiny and upscaled.
+For classroom reels render at least 540x960 with 16+ samples (finals: 1080x1920, 32-48 samples);
+the 432x768 / 8-sample preview is only for quick checks.
