@@ -428,8 +428,8 @@ def apply_classroom_set():
         cb = bpy.data.objects.new("Cam_Board", cd)
         (bpy.data.collections.get("Cameras") or sc.collection).objects.link(cb)
         cd.sensor_fit = bpy.data.objects["Cam_Wide"].data.sensor_fit
-    _aim_cam("Cam_Wide", (0.02, -2.20, 1.12), (-0.06, 0.30, 1.30), 23, 4.0)                  # low wide: board high
-    _aim_cam("Cam_Board", (-0.50, -1.80, 1.05), (-0.38, 0.45, 1.36), 26, 4.0)               # board + Claude pointing
+    _aim_cam("Cam_Wide", (0.62, -2.10, 1.00), (0.02, 0.35, 1.26), 22, 4.0)                  # low wide: board high
+    _aim_cam("Cam_Board", (0.32, -1.70, 1.08), (-0.18, 0.45, 1.38), 23, 4.0)               # board + Claude pointing
     _aim_cam("Cam_Mascot", claude + Vector((0.30, -0.85, -0.04)), claude + Vector((0.08, 0.0, 0.12)), 36, 1.8,
              focus=bpy.data.objects.get("Mascot_FocusTarget"))
     _aim_cam("Cam_Human", head + Vector((-1.00, -0.85, -0.12)), head + Vector((0.0, 0.0, -0.14)), 40, 1.8,

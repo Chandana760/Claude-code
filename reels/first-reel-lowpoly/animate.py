@@ -645,6 +645,7 @@ def animate():
                 return 1 - abs(2 * x - 1)
         return 0.0
 
+    classroom = bpy.context.scene.get("set") == "classroom"
     for f in range(1, LAST_FRAME + 1):
         t = (f - 1) / FPS
 
@@ -709,6 +710,9 @@ def animate():
         # (no turn toward him; idle drift eases out)
         hx -= 0.018 * math.sin(t * 0.7) * listen
         hy -= 0.03 * math.sin(t * 0.45 + 1.0) * listen
+        if classroom:                                # while Claude explains she looks up at the board
+            hx -= 0.16 * listen
+            hz -= 0.10 * listen
 
         # Warm ending: she smiles at the final "Especially those."
         if t >= LINES[-1]["t"] - 0.2 and act != "sleepy":
