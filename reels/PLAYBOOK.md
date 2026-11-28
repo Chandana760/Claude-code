@@ -21,6 +21,15 @@ inside the 3:4 profile-grid crop (which cuts 240 px off the top and bottom of a
 1080x1920 reel). Frame every shot with enough headroom that captions sit on the
 background, not on faces.
 
+## Workflow for anything new (approval first)
+
+When a reference or script brings something new - a camera angle, a prop, a set, a new mascot,
+a new pose or any change to an existing setup - first build it (Blender), render test shots and
+show them for approval. Only after approval does it go into the reel. Once approved it becomes part
+of our standard kit (e.g. reels/CLASSROOM_SHOTS.md) and is reused in later reels.
+Each set's shots, camera positions and character staging are recorded so episodes can be made
+straight from a script.
+
 ## Content buckets
 Ranked by plays in the scraped dataset.
 
