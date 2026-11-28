@@ -133,7 +133,7 @@ def board_texture(path, title="", lines=()):
 
 # Layout (metres)
 DESK_X = -0.48                                  # desk slides left; Maya's chair sits at the right
-PODIUM = Vector((-0.84, -0.04, 0.80))           # Claude's little wooden step podium on the desk
+PODIUM = Vector((-0.84, -0.04, 0.77))           # Claude's little wooden step podium on the desk
 BOARD = Vector((-0.10, 0.55, 1.62))             # whiteboard centre (on its easel)
 BOARD_W, BOARD_H = 1.10, 0.78
 MAYA = Vector((0.50, -0.04, 0.0))                # her chair
@@ -178,10 +178,11 @@ def build_seated_body(root, coll):
     legs.append(_box((0, 0.02, 0.63), (0.34, 0.30, 0.14), bevel=0.05))       # hips (inside the jacket)
     for sx in (1, -1):
         x = sx * 0.105
-        legs.append(_tube([(x, 0.02, 0.62), (x, -0.20, 0.615), (x * 1.04, -0.40, 0.60)], 0.095, 0.085))   # thigh
-        legs.append(_ico((x * 1.04, -0.41, 0.585), 0.085, sub=2))                                       # knee
-        legs.append(_tube([(x * 1.04, -0.42, 0.57), (x * 1.06, -0.44, 0.32), (x * 1.06, -0.45, 0.12)], 0.078, 0.068))  # shin
+        legs.append(_tube([(x, 0.02, 0.62), (x, -0.18, 0.615), (x * 1.03, -0.34, 0.60), (x * 1.04, -0.41, 0.55),
+                           (x * 1.05, -0.43, 0.42), (x * 1.06, -0.44, 0.26), (x * 1.06, -0.45, 0.11)], 0.092, 0.07, seg=16))
     ob = _mesh("Human_Legs", legs, pants, coll, parent=root)
+    for p in ob.data.polygons:                                           # clean trouser legs (no chipped facets)
+        p.use_smooth = True
     shoes = []
     for sx in (1, -1):
         x = sx * 0.112
@@ -237,7 +238,7 @@ def apply_classroom_set():
                 bpy.data.objects.remove(o, do_unlink=True)
     desk = bpy.data.objects["Desk"]
     desk.location.x = DESK_X
-    desk.location.z = 0.05                                   # a touch higher: her crossed arms rest on it
+    desk.location.z = 0.02                                   # a touch higher: her crossed arms rest on it
     top_ob = bpy.data.objects.get("Desk_Top")
     if top_ob:
         top_ob.scale.x = 0.80                                  # shorter desk: she sits right at its end
@@ -249,8 +250,8 @@ def apply_classroom_set():
               legs_mat, room)
     mug = bpy.data.objects.get("Mug")
     if mug:
-        mug.location.x, mug.location.y, mug.location.z = -1.06, -0.14, 0.80
-    PX, PY, PZ = -0.10, 0.12, 0.80
+        mug.location.x, mug.location.y, mug.location.z = -1.06, -0.14, 0.77
+    PX, PY, PZ = -0.10, 0.12, 0.77
     _mesh("Pencil_Cup", [lambda bm: bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=12, radius1=0.042,
                                                           radius2=0.046, depth=0.11, matrix=Matrix.Translation((PX, PY, PZ + 0.055)))],
           _mat("M_PencilCup", hx("#3E5C76"), rough=0.6), room)
@@ -258,8 +259,8 @@ def apply_classroom_set():
             for (dx, dy), c in (((0.012, 0.0), "#F2C14E"), ((-0.011, 0.01), "#E24B5B"), ((0.0, -0.013), "#3D7DD8"))]
     for k, (b, c) in enumerate(pens):
         _mesh(f"Pen_{k}", [b], _mat(f"M_Pen_{k}", hx(c), rough=0.5), room)
-    _mesh("Notebook", [_box((-0.36, -0.14, 0.815), (0.22, 0.16, 0.03), bevel=0.004, rot=(0, 0, 6)),
-                       _box((-0.355, -0.14, 0.84), (0.20, 0.15, 0.02), bevel=0.004, rot=(0, 0, -4))],
+    _mesh("Notebook", [_box((-0.36, -0.14, 0.785), (0.22, 0.16, 0.03), bevel=0.004, rot=(0, 0, 6)),
+                       _box((-0.355, -0.14, 0.81), (0.20, 0.15, 0.02), bevel=0.004, rot=(0, 0, -4))],
           _mat("M_Notebook", hx("#7FB7A4"), rough=0.7), room)
 
     # 2. Claude on a small wooden step podium, with his teaching pointer
@@ -349,14 +350,12 @@ def apply_classroom_set():
     cloth = bpy.data.materials.get("M_Char_Outfit")
     if cloth:
         def jacket_body(bm):
-            vs = bmesh.ops.create_icosphere(bm, subdivisions=3, radius=0.20,
+            vs = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=0.20,
                                             matrix=Matrix.LocRotScale(Vector((0, 0.01, 0.90)), None,
-                                                                      Vector((1.30, 1.05, 1.42))))["verts"]
+                                                                      Vector((1.22, 0.94, 1.30))))["verts"]
             cut = [v for v in vs if v.co.z < 0.58 or v.co.z > 1.10 or (v.co.y < -0.12 and abs(v.co.x) < 0.10 and v.co.z > 0.66)]
             bmesh.ops.delete(bm, geom=cut, context="VERTS")
-        jb = _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)
-        for p in jb.data.polygons:
-            p.use_smooth = True
+        _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)   # faceted like the rest of her jacket
     build_chair(root, chars)
     sc["head_pose_offset"] = (R(-8), 0.0, R(30))        # chin up a touch, eyes on the board (cancels the desk-set turn)
 
