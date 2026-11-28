@@ -1,7 +1,7 @@
 """Classroom set TEST (reuses the dark post audio): shows the board being written,
 struck, drawn on and wiped, and Claude's pointer following it. Not a real episode."""
 BOARD = [
-  (2, 0.3, "title", "What's a dark post?"),
+  (0, -2.0, "title", "What's a dark post?"),
   (3, 0.4, "write", "w1", "ad", (0.08, 0.30), "blue"),
   (3, 1.4, "write", "w2", "not on profile", (0.30, 0.30), "blue"),
   (4, 1.0, "strike", "w1"),

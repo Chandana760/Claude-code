@@ -453,7 +453,7 @@ def classroom_board():
     states = []                                  # (time, png)
     first = os.path.join(out, "state_000.png")
     render(first)
-    states.append((0.0, first))
+    states.append((-1e9, first))                 # (a title with a negative time is already on the board)
     targets = []                                 # (time, (u, v)) - where the pointer goes
     for k, (t, op, args, p) in enumerate(steps):
         band = None
