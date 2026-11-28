@@ -385,8 +385,15 @@ def apply_classroom_set():
             c = sum((p.co for p in comp), Vector()) / len(comp)
             if abs(c.y) < 0.03 and c.z > 0.85:                 # torso panel or shoulder ball (sleeves sit forward)
                 drop += [p for p in comp if p.co.y > 0.01]
+            elif (c - Vector((-0.07, -0.28, 0.885))).length < 0.07 and max(p.co.x for p in comp) - min(p.co.x for p in comp) > 0.30:
+                for p in comp:                                  # top forearm lies ON the lower one (no cut-through seam)
+                    p.co += Vector((0.0, -0.022, 0.03))
         bmesh.ops.delete(bmb, geom=drop, context="VERTS")
         bmb.to_mesh(body.data); bmb.free()
+        hands = bpy.data.objects["Human_Hands"]
+        for v in hands.data.vertices:                    # the top forearm's hand moves with it
+            if (v.co - Vector((0.175, -0.345, 0.905))).length < 0.07:
+                v.co += Vector((0.0, -0.022, 0.03))
         jb = _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)
         for p in jb.data.polygons:                  # soft shading: no jagged seam where her sleeves meet it
             p.use_smooth = True
