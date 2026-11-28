@@ -343,6 +343,15 @@ def apply_classroom_set():
     root.location = MAYA
     root.rotation_euler = (0, 0, R(MAYA_YAW))
     build_seated_body(root, chars)
+    # her back is on camera in this set: one smooth jacket back panel over the two front panels' seam
+    cloth = bpy.data.materials.get("M_Char_Outfit")
+    if cloth:
+        def back_shell(bm):
+            vs = bmesh.ops.create_icosphere(bm, subdivisions=3, radius=0.20,
+                                            matrix=Matrix.LocRotScale(Vector((0, 0.012, 0.95)), None,
+                                                                      Vector((1.26, 0.93, 1.17))))["verts"]
+            bmesh.ops.delete(bm, geom=[v for v in vs if v.co.y < -0.03 or v.co.z < 0.70], context="VERTS")
+        _mesh("Human_JacketBack", [back_shell], cloth, chars, parent=root)
     build_chair(root, chars)
     sc["head_pose_offset"] = (R(-8), 0.0, R(30))        # chin up a touch, eyes on the board (cancels the desk-set turn)
 
