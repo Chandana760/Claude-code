@@ -169,6 +169,20 @@ def _ico(loc, r, scale=(1, 1, 1), sub=2):
     return lambda bm: bmesh.ops.create_icosphere(bm, subdivisions=sub, radius=r, matrix=mtx)
 
 
+def smooth_by_angle(me, deg=40.0, verts=None):
+    """Soft low-poly shading: faces shade smooth except across edges sharper than `deg`.
+    If `verts` is given, only faces whose vertices are all in that set are softened."""
+    bm = bmesh.new(); bm.from_mesh(me)
+    lim = math.radians(deg)
+    for f in bm.faces:
+        f.smooth = verts is None or all(v.index in verts for v in f.verts)
+    sharp = {e.index for e in bm.edges if not e.is_manifold or (len(e.link_faces) == 2 and e.calc_face_angle(0) > lim)}
+    bm.to_mesh(me); bm.free()
+    attr = me.attributes.get("sharp_edge") or me.attributes.new("sharp_edge", "BOOLEAN", "EDGE")
+    for i, d in enumerate(attr.data):
+        d.value = i in sharp
+
+
 def build_seated_body(root, coll):
     """Her lower body for sitting (hips, legs, sneakers) - the bust above is untouched."""
     pants = _mat("M_Char_Pants", hx("#3B4A6B"), rough=0.85)            # mid denim
@@ -371,7 +385,7 @@ def apply_classroom_set():
         # the tailored body below forms the back and sides as one clean surface
         body = bpy.data.objects["Human_Body"]
         bmb = bmesh.new(); bmb.from_mesh(body.data); bmb.verts.ensure_lookup_table()
-        seen, drop = set(), []
+        seen, drop, soft_ids = set(), [], set()
         for v in bmb.verts:
             if v.index in seen:
                 continue
@@ -385,16 +399,22 @@ def apply_classroom_set():
             c = sum((p.co for p in comp), Vector()) / len(comp)
             if abs(c.y) < 0.03 and c.z > 0.85 and abs(c.x) < 0.17:   # the two jacket front panels only (shoulders stay whole)
                 drop += [p for p in comp if p.co.y > 0.01]
+            elif abs(c.y) < 0.03 and c.z > 0.95 and abs(c.x) >= 0.17:   # shoulder pieces: soften later
+                soft_ids |= {p.index for p in comp}
             elif (c - Vector((-0.07, -0.28, 0.885))).length < 0.07 and max(p.co.x for p in comp) - min(p.co.x for p in comp) > 0.30:
                 for p in comp:                                  # top forearm lies ON the lower one (no cut-through seam)
                     p.co += Vector((0.0, -0.022, 0.03))
         bmesh.ops.delete(bmb, geom=drop, context="VERTS")
         bmb.to_mesh(body.data); bmb.free()
+        sh = {v.index for v in body.data.vertices
+              if min((v.co - Vector((sx * 0.20, 0.0, 1.06))).length for sx in (1, -1)) < 0.105}
+        smooth_by_angle(body.data, 40, verts=sh)          # soften only her shoulder caps (sleeves stay faceted)
         hands = bpy.data.objects["Human_Hands"]
         for v in hands.data.vertices:                    # the top forearm's hand moves with it
             if (v.co - Vector((0.175, -0.345, 0.905))).length < 0.07:
                 v.co += Vector((0.0, -0.022, 0.03))
-        _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)   # low-poly facets, like the rest of her
+        jb = _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)
+        smooth_by_angle(jb.data, 40)                      # soft low-poly: no hard cut where the shoulders meet it
     build_chair(root, chars)
     sc["head_pose_offset"] = (R(-8), 0.0, R(30))        # chin up a touch, eyes on the board (cancels the desk-set turn)
 
