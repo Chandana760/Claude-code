@@ -367,7 +367,8 @@ def apply_classroom_set():
             """Tailored jacket body: elliptical rings lofted waist -> chest -> shoulders,
             open over the tee at the front, flat facets like the rest of her jacket."""
             rings_def = ((0.60, 0.185, 0.150, 0.030), (0.70, 0.215, 0.165, 0.020), (0.84, 0.250, 0.185, 0.010),
-                         (0.98, 0.262, 0.182, 0.000), (1.08, 0.235, 0.155, 0.000), (1.15, 0.150, 0.110, 0.000))
+                         (0.97, 0.275, 0.185, 0.000), (1.05, 0.292, 0.168, 0.000), (1.11, 0.240, 0.135, 0.000),
+                         (1.15, 0.120, 0.090, 0.000))   # low-poly shoulders are part of the jacket
             seg = 14
             rings = []
             for z, rx, ry, yc in rings_def:
@@ -399,22 +400,18 @@ def apply_classroom_set():
             c = sum((p.co for p in comp), Vector()) / len(comp)
             if abs(c.y) < 0.03 and c.z > 0.85 and abs(c.x) < 0.17:   # the two jacket front panels only (shoulders stay whole)
                 drop += [p for p in comp if p.co.y > 0.01]
-            elif abs(c.y) < 0.03 and c.z > 0.95 and abs(c.x) >= 0.17:   # shoulder pieces: soften later
-                soft_ids |= {p.index for p in comp}
+            elif abs(c.y) < 0.03 and c.z > 0.95 and abs(c.x) >= 0.17:   # old round shoulder pieces: the jacket has shoulders now
+                drop += comp
             elif (c - Vector((-0.07, -0.28, 0.885))).length < 0.07 and max(p.co.x for p in comp) - min(p.co.x for p in comp) > 0.30:
                 for p in comp:                                  # top forearm lies ON the lower one (no cut-through seam)
                     p.co += Vector((0.0, -0.022, 0.03))
         bmesh.ops.delete(bmb, geom=drop, context="VERTS")
         bmb.to_mesh(body.data); bmb.free()
-        sh = {v.index for v in body.data.vertices
-              if min((v.co - Vector((sx * 0.20, 0.0, 1.06))).length for sx in (1, -1)) < 0.105}
-        smooth_by_angle(body.data, 40, verts=sh)          # soften only her shoulder caps (sleeves stay faceted)
         hands = bpy.data.objects["Human_Hands"]
         for v in hands.data.vertices:                    # the top forearm's hand moves with it
             if (v.co - Vector((0.175, -0.345, 0.905))).length < 0.07:
                 v.co += Vector((0.0, -0.022, 0.03))
-        jb = _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)
-        smooth_by_angle(jb.data, 40)                      # soft low-poly: no hard cut where the shoulders meet it
+        _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)   # faceted low-poly, like the rest of her
     build_chair(root, chars)
     sc["head_pose_offset"] = (R(-8), 0.0, R(30))        # chin up a touch, eyes on the board (cancels the desk-set turn)
 
