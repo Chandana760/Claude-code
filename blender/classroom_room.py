@@ -383,7 +383,7 @@ def apply_classroom_set():
                     if o.index not in seen:
                         seen.add(o.index); stack.append(o)
             c = sum((p.co for p in comp), Vector()) / len(comp)
-            if abs(c.y) < 0.03 and c.z > 0.85:                 # torso panel or shoulder ball (sleeves sit forward)
+            if abs(c.y) < 0.03 and c.z > 0.85 and abs(c.x) < 0.17:   # the two jacket front panels only (shoulders stay whole)
                 drop += [p for p in comp if p.co.y > 0.01]
             elif (c - Vector((-0.07, -0.28, 0.885))).length < 0.07 and max(p.co.x for p in comp) - min(p.co.x for p in comp) > 0.30:
                 for p in comp:                                  # top forearm lies ON the lower one (no cut-through seam)
