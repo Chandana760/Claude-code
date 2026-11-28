@@ -132,11 +132,86 @@ def board_texture(path, title="", lines=()):
 
 
 # Layout (metres)
-DESK_X = -0.45                                  # desk slides left; Maya's chair sits at the right
-BOOKS = Vector((-0.62, -0.06, 0.75))            # book stack on the desk (Claude's podium)
-BOARD = Vector((-0.12, 0.55, 1.55))             # whiteboard centre (on its easel)
-MAYA = Vector((0.80, 0.02, 0.0))                # her chair
+DESK_X = -0.62                                  # desk slides left; Maya's chair sits at the right
+PODIUM = Vector((-0.86, -0.04, 0.75))           # Claude's little wooden step podium on the desk
+BOARD = Vector((-0.10, 0.55, 1.62))             # whiteboard centre (on its easel)
+BOARD_W, BOARD_H = 1.10, 0.78
+MAYA = Vector((0.98, 0.04, 0.0))                # her chair
 MAYA_YAW = -68                                  # turned toward the board / Claude
+FONT_HAND = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "PatrickHand-Regular.ttf")
+
+
+def _tube(points, r0, r1, seg=10):
+    """Swept tube through points (simple frames), capped - for legs."""
+    def b(bm):
+        P = [Vector(p) for p in points]
+        rings, ref = [], Vector((1, 0, 0))
+        for k, p in enumerate(P):
+            tan = (P[min(len(P) - 1, k + 1)] - P[max(0, k - 1)]).normalized()
+            side = tan.cross(ref)
+            if side.length < 1e-3:
+                side = tan.cross(Vector((0, 1, 0)))
+            side.normalize()
+            up = side.cross(tan).normalized()
+            r = r0 + (r1 - r0) * k / (len(P) - 1)
+            rings.append([bm.verts.new(p + (side * math.cos(2 * math.pi * a / seg) + up * math.sin(2 * math.pi * a / seg)) * r)
+                          for a in range(seg)])
+        for k in range(len(rings) - 1):
+            for a in range(seg):
+                bm.faces.new((rings[k][a], rings[k][(a + 1) % seg], rings[k + 1][(a + 1) % seg], rings[k + 1][a]))
+        for ring in (rings[0], rings[-1]):
+            bm.faces.new(ring)
+    return b
+
+
+def _ico(loc, r, scale=(1, 1, 1), sub=2):
+    mtx = Matrix.LocRotScale(Vector(loc), None, Vector(scale))
+    return lambda bm: bmesh.ops.create_icosphere(bm, subdivisions=sub, radius=r, matrix=mtx)
+
+
+def build_seated_body(root, coll):
+    """Her lower body for sitting (hips, legs, sneakers) - the bust above is untouched."""
+    pants = _mat("M_Char_Pants", hx("#3B4A6B"), rough=0.85)            # mid denim
+    shoe = _mat("M_Char_Sneaker", hx("#EEE7DA"), rough=0.6)
+    sole = _mat("M_Char_SneakerSole", hx("#B9AFA2"), rough=0.7)
+    legs = []
+    legs.append(_box((0, 0.02, 0.63), (0.40, 0.36, 0.20), bevel=0.06))       # hips / seat of the trousers
+    for sx in (1, -1):
+        x = sx * 0.105
+        legs.append(_tube([(x, 0.02, 0.62), (x, -0.20, 0.615), (x * 1.04, -0.40, 0.60)], 0.095, 0.085))   # thigh
+        legs.append(_ico((x * 1.04, -0.41, 0.585), 0.085, sub=2))                                       # knee
+        legs.append(_tube([(x * 1.04, -0.42, 0.57), (x * 1.06, -0.44, 0.32), (x * 1.06, -0.45, 0.12)], 0.078, 0.068))  # shin
+    ob = _mesh("Human_Legs", legs, pants, coll, parent=root)
+    shoes = []
+    for sx in (1, -1):
+        x = sx * 0.112
+        shoes.append(_box((x, -0.52, 0.055), (0.115, 0.24, 0.09), bevel=0.03))
+    sh = _mesh("Human_Shoes", shoes, shoe, coll, parent=root)
+    _mesh("Human_ShoeSoles", [_box((sx * 0.112, -0.52, 0.012), (0.12, 0.245, 0.024), bevel=0.008) for sx in (1, -1)],
+          sole, coll, parent=root)
+    return ob
+
+
+def build_chair(root, coll):
+    """A proper office chair she sits in (mustard upholstery, dark frame, star base on casters)."""
+    up = _mat("M_Chair_Mustard", hx("#D6A23A"), rough=0.8)
+    frame = _mat("M_Chair_Frame", hx("#2A2A30"), rough=0.45)
+    _mesh("Maya_Chair_Cushions", [
+        _box((0, 0.05, 0.49), (0.54, 0.50, 0.10), bevel=0.04),                    # seat cushion
+        _box((0, 0.33, 0.92), (0.52, 0.10, 0.62), bevel=0.05, rot=(-8, 0, 0)),     # tall curved-ish backrest
+    ], up, coll, parent=root)
+    parts = [_cyl((0, 0.05, 0.43), (0, 0.05, 0.18), 0.028),                         # gas lift
+             _box((0, 0.05, 0.435), (0.30, 0.28, 0.025)),                          # seat plate
+             _cyl((0, 0.28, 0.46), (0, 0.33, 0.66), 0.02)]                         # back spine
+    for sx in (1, -1):                                                              # armrests
+        parts += [_cyl((sx * 0.28, 0.10, 0.45), (sx * 0.28, 0.10, 0.66), 0.015),
+                  _box((sx * 0.28, 0.06, 0.675), (0.06, 0.30, 0.03), bevel=0.012)]
+    for k in range(5):                                                              # star base + casters
+        a = math.radians(90 + k * 72)
+        end = (0.30 * math.cos(a), 0.05 + 0.30 * math.sin(a), 0.07)
+        parts.append(_cyl((0, 0.05, 0.13), end, 0.02))
+        parts.append(_ico((end[0], end[1], 0.035), 0.035, sub=1))
+    _mesh("Maya_Chair_Frame", parts, frame, coll, parent=root)
 
 
 def apply_classroom_set():
@@ -144,66 +219,90 @@ def apply_classroom_set():
     sc["set"] = "classroom"
     room = bpy.data.collections.get("Background")
     lights = bpy.data.collections.get("Lighting")
+    chars = bpy.data.collections.get("Characters") or room
 
-    # 1. Desk corner -> lesson desk: keep desk, mug and notes; drop monitor, keyboard, lamp, plant
-    for name in ("Monitor", "Keyboard", "DeskLamp", "Plant"):
+    # 1. Clean lesson desk: mug at one end, pen holder + notebook at the other
+    for name in ("Monitor", "Keyboard", "DeskLamp", "Plant", "StickyNotes"):
         root = bpy.data.objects.get(name)
         if root:
             for o in [root] + list(root.children_recursive):
                 bpy.data.objects.remove(o, do_unlink=True)
     desk = bpy.data.objects["Desk"]
     desk.location.x = DESK_X
-    for name, loc in (("Mug", (-0.22, -0.20)), ("StickyNotes", (-0.95, -0.20))):
-        o = bpy.data.objects.get(name)
-        if o:
-            o.location.x, o.location.y = loc
+    mug = bpy.data.objects.get("Mug")
+    if mug:
+        mug.location.x, mug.location.y = -1.30, -0.12
+    PX, PY, PZ = 0.04, -0.02, 0.75
+    _mesh("Pencil_Cup", [lambda bm: bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=12, radius1=0.042,
+                                                          radius2=0.046, depth=0.11, matrix=Matrix.Translation((PX, PY, PZ + 0.055)))],
+          _mat("M_PencilCup", hx("#3E5C76"), rough=0.6), room)
+    pens = [(_cyl((PX + dx, PY + dy, PZ + 0.03), (PX + dx * 2.4, PY + dy * 2.4, PZ + 0.20), 0.0065, seg=6), c)
+            for (dx, dy), c in (((0.012, 0.0), "#F2C14E"), ((-0.011, 0.01), "#E24B5B"), ((0.0, -0.013), "#3D7DD8"))]
+    for k, (b, c) in enumerate(pens):
+        _mesh(f"Pen_{k}", [b], _mat(f"M_Pen_{k}", hx(c), rough=0.5), room)
+    _mesh("Notebook", [_box((-0.16, -0.12, 0.765), (0.22, 0.16, 0.03), bevel=0.004, rot=(0, 0, 6)),
+                       _box((-0.155, -0.12, 0.79), (0.20, 0.15, 0.02), bevel=0.004, rot=(0, 0, -4))],
+          _mat("M_Notebook", hx("#7FB7A4"), rough=0.7), room)
 
-    # 2. Book stack + Claude with his pointer
-    stack = []
-    for k, (col, rz, h) in enumerate(((hx("#4E8B5A"), 4, 0.075), (hx("#6B4E9B"), -5, 0.07), (hx("#D9A93A"), 3, 0.07))):
-        z = BOOKS.z + sum(x[2] for x in ((0, 0, 0.075), (0, 0, 0.07), (0, 0, 0.07))[:k])
-        stack.append((col, rz, h, z))
-    for k, (col, rz, h, z) in enumerate(stack):
-        _mesh(f"Books_{k}", [_box((BOOKS.x, BOOKS.y, z + h / 2), (0.36 - 0.02 * k, 0.27, h), bevel=0.008, rot=(0, 0, rz))],
-              _mat(f"M_Book_{k}", col, rough=0.75), room)
-        _mesh(f"Books_{k}_Pages", [_box((BOOKS.x + 0.004, BOOKS.y - 0.004, z + h / 2), (0.34 - 0.02 * k, 0.262, h * 0.7), rot=(0, 0, rz))],
-              _mat("M_BookPages", (0.92, 0.89, 0.80)), room)
-    top = stack[-1][3] + stack[-1][2]
+    # 2. Claude on a small wooden step podium, with his teaching pointer
+    wood = _mat("M_Podium_Wood", hx("#B98552"), rough=0.6)
+    top_m = _mat("M_Podium_Top", hx("#F1E6D2"), rough=0.7)
+    PH = 0.27                                                     # podium height (about the reference's book stack)
+    _mesh("Claude_Podium", [_box((PODIUM.x, PODIUM.y, PODIUM.z + PH / 2), (0.30, 0.26, PH), bevel=0.012),
+                            _box((PODIUM.x + 0.18, PODIUM.y - 0.02, PODIUM.z + 0.07), (0.10, 0.22, 0.14), bevel=0.01),     # step
+                            _box((PODIUM.x + 0.25, PODIUM.y - 0.02, PODIUM.z + 0.035), (0.08, 0.22, 0.07), bevel=0.01)],   # lower step
+          wood, room)
+    _mesh("Claude_Podium_Top", [_box((PODIUM.x, PODIUM.y, PODIUM.z + PH + 0.004), (0.31, 0.27, 0.008))], top_m, room)
+    top = PODIUM.z + PH + 0.008
     mroot = bpy.data.objects["Mascot_Root"]
-    mroot.location = (BOOKS.x, BOOKS.y, top)
+    mroot.location = (PODIUM.x, PODIUM.y, top)
     mroot.rotation_euler = (0, 0, R(-8))
-    # pointer: from Claude's right side up toward the board (rides along with his hops)
     bounce = bpy.data.objects.get("Mascot_Bounce") or mroot
-    ptr = _mesh("Claude_Pointer", [_cyl((0.15, -0.02, 0.10), (0.42, 0.30, 0.62), 0.0075, seg=6),
-                                   _cyl((0.42, 0.30, 0.62), (0.44, 0.32, 0.65), 0.009, seg=6)],
-                _mat("M_Pointer", (0.85, 0.78, 0.62), rough=0.5), room, parent=bounce)
+    bpy.context.view_layer.update()
+    # pointer pivots at his right side; animate.py swings it to whatever is being written
+    ptr_m = _mat("M_Pointer", hx("#EFE4CC"), rough=0.5)
+    ptr = _mesh("Claude_Pointer", [_cyl((0, 0, 0), (0, 0, 0.78), 0.0075, seg=6),
+                                   _cyl((0, 0, 0.78), (0, 0, 0.80), 0.010, seg=6)], ptr_m, room)
+    pivot_world = mroot.matrix_world @ Vector((0.16, -0.03, 0.11))
+    ptr.parent = bounce
+    ptr.matrix_parent_inverse = bounce.matrix_world.inverted()
+    ptr.location = pivot_world
+    ptr.rotation_mode = "QUATERNION"
+    rest_dir = (Vector((BOARD.x - 0.30, BOARD.y, BOARD.z - 0.20)) - pivot_world).normalized()
+    ptr.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(rest_dir)
+    sc["pointer_pivot"] = tuple(pivot_world)
 
-    # 3. Whiteboard on an easel (episode can supply its own board image)
-    frame_m = _mat("M_Board_Frame", (0.55, 0.56, 0.60), rough=0.4)
-    bw, bh = 1.05, 0.74
+    # 3. Whiteboard on an easel, marker tray with markers; animate.py writes on it line by line
+    frame_m = _mat("M_Board_Frame", (0.62, 0.63, 0.66), rough=0.35)
+    bw, bh = BOARD_W, BOARD_H
     _mesh("Board_Frame", [_box((BOARD.x, BOARD.y + 0.012, BOARD.z), (bw + 0.05, 0.03, bh + 0.05), bevel=0.006),
-                          _box((BOARD.x, BOARD.y - 0.02, BOARD.z - bh / 2 - 0.035), (bw * 0.7, 0.07, 0.015))],   # marker tray
+                          _box((BOARD.x, BOARD.y - 0.025, BOARD.z - bh / 2 - 0.035), (bw * 0.75, 0.07, 0.015))],
           frame_m, room)
-    legs_m = _mat("M_Easel", (0.12, 0.12, 0.14), rough=0.5)
-    _mesh("Board_Easel", [_cyl((BOARD.x - 0.40, BOARD.y + 0.06, 0.0), (BOARD.x - 0.36, BOARD.y + 0.04, BOARD.z + 0.25), 0.014),
-                          _cyl((BOARD.x + 0.40, BOARD.y + 0.06, 0.0), (BOARD.x + 0.36, BOARD.y + 0.04, BOARD.z + 0.25), 0.014),
-                          _cyl((BOARD.x, BOARD.y + 0.45, 0.0), (BOARD.x, BOARD.y + 0.05, BOARD.z + 0.25), 0.012)],
+    for k, c in enumerate(("#2F5FD0", "#D83A3A", "#2E9E5B", "#222222")):
+        _mesh(f"Board_Marker_{k}", [_cyl((BOARD.x - 0.30 + k * 0.09, BOARD.y - 0.035, BOARD.z - bh / 2 - 0.020),
+                                         (BOARD.x - 0.23 + k * 0.09, BOARD.y - 0.035, BOARD.z - bh / 2 - 0.020), 0.009, seg=6)],
+              _mat(f"M_Marker_{k}", hx(c), rough=0.4), room)
+    legs_m = _mat("M_Easel", (0.10, 0.10, 0.12), rough=0.5)
+    _mesh("Board_Easel", [_cyl((BOARD.x - 0.42, BOARD.y + 0.06, 0.0), (BOARD.x - 0.38, BOARD.y + 0.04, BOARD.z + 0.30), 0.014),
+                          _cyl((BOARD.x + 0.42, BOARD.y + 0.06, 0.0), (BOARD.x + 0.38, BOARD.y + 0.04, BOARD.z + 0.30), 0.014),
+                          _cyl((BOARD.x, BOARD.y + 0.50, 0.0), (BOARD.x, BOARD.y + 0.05, BOARD.z + 0.30), 0.012)],
           legs_m, room)
-    img_path = sc.get("board_image") or board_texture(os.path.join(os.environ.get("BOARD_DIR") or os.path.dirname(bpy.data.filepath) or ".", "board_test.png"),
-                                                      title="Today's lesson")
+    test_png = os.path.join(os.environ.get("BOARD_DIR") or os.path.dirname(bpy.data.filepath) or ".", "board_blank.png")
+    img_path = board_texture(test_png, title="")
     bm_mat = bpy.data.materials.new("M_Board_Face")
     bm_mat.use_nodes = True
     nt = bm_mat.node_tree
     bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
     bsdf.inputs["Roughness"].default_value = 0.35
     tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.name = "BoardImage"
     tex.image = bpy.data.images.load(img_path, check_existing=False)
     nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
     for n in ("Emission Color", "Emission"):
         if n in bsdf.inputs:
             nt.links.new(tex.outputs["Color"], bsdf.inputs[n])
             break
-    bsdf.inputs["Emission Strength"].default_value = 0.35            # board stays readable in the night room
+    bsdf.inputs["Emission Strength"].default_value = 0.35
     me = bpy.data.meshes.new("Board_Face")
     bmx = bmesh.new()
     uv = bmx.loops.layers.uv.new()
@@ -215,20 +314,26 @@ def apply_classroom_set():
     bmx.free()
     me.materials.append(bm_mat)
     room.objects.link(bpy.data.objects.new("Board_Face", me))
+    sc["board_geom"] = (BOARD.x, BOARD.y - 0.004, BOARD.z, bw, bh)
+    sc["board_font"] = FONT_HAND
 
-    # 4. Maya in her chair at the right, turned to the board, arms crossed
+    # 4. Maya: seated properly in her chair at the right, turned to the board
     root = bpy.data.objects["Human_Root"]
+    old_chair = bpy.data.objects.get("Human_Chair")
+    if old_chair:
+        bpy.data.objects.remove(old_chair, do_unlink=True)
     root.location = MAYA
     root.rotation_euler = (0, 0, R(MAYA_YAW))
+    build_seated_body(root, chars)
+    build_chair(root, chars)
     sc["head_pose_offset"] = (R(-6), 0.0, R(-6))       # chin up a touch: watching the board
 
-    # 5. Room dressing: bookshelf, ivy, neon strips, pencil cup, notebook
+    # 5. Room dressing: bookshelf, ivy, pink neon strips
     shelf_m = _mat("M_Shelf_Wood", (0.16, 0.08, 0.04), rough=0.7)
     SX, SY = 1.55, 1.05
-    parts = [_box((SX, SY, 0.85), (0.70, 0.30, 0.03)), _box((SX, SY, 1.25), (0.70, 0.30, 0.03)),
-             _box((SX, SY, 1.65), (0.70, 0.30, 0.03)), _box((SX, SY, 2.05), (0.70, 0.30, 0.03)),
-             _box((SX - 0.36, SY, 1.10), (0.03, 0.30, 2.20)), _box((SX + 0.36, SY, 1.10), (0.03, 0.30, 2.20)),
-             _box((SX, SY + 0.14, 1.10), (0.70, 0.02, 2.20))]
+    parts = [_box((SX, SY, z), (0.70, 0.30, 0.03)) for z in (0.85, 1.25, 1.65, 2.05)]
+    parts += [_box((SX - 0.36, SY, 1.10), (0.03, 0.30, 2.20)), _box((SX + 0.36, SY, 1.10), (0.03, 0.30, 2.20)),
+              _box((SX, SY + 0.14, 1.10), (0.70, 0.02, 2.20))]
     _mesh("Bookshelf", parts, shelf_m, room)
     cols = ("#E24B5B", "#3D7DD8", "#F2C14E", "#4E8B5A", "#8E5BD0", "#F08A3C", "#2FA7A0", "#EDE4D3")
     k = 0
@@ -254,18 +359,8 @@ def apply_classroom_set():
     neon = _mat("M_Neon_Pink", hx("#FF4FB0"), emit=6.0)
     _mesh("Neon_Strips", [_box((-1.18, 1.14, 1.85), (0.025, 0.02, 1.5)), _box((1.18, 1.14, 1.85), (0.025, 0.02, 1.5)),
                           _box((0.0, 1.14, 2.80), (2.30, 0.02, 0.025))], neon, room)
-    cup_m = _mat("M_PencilCup", hx("#2F6F6A"), rough=0.6)
-    PX, PY, PZ = -0.10, 0.10, 0.75
-    _mesh("Pencil_Cup", [lambda bm: bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=10, radius1=0.04,
-                                                          radius2=0.045, depth=0.11, matrix=Matrix.Translation((PX, PY, PZ + 0.055)))],
-          cup_m, room)
-    pencils = [_cyl((PX + dx, PY + dy, PZ + 0.03), (PX + dx * 2.2, PY + dy * 2.2, PZ + 0.19), 0.006, seg=6)
-               for dx, dy in ((0.012, 0.0), (-0.01, 0.01), (0.0, -0.012))]
-    _mesh("Pencils", pencils, _mat("M_Pencil", hx("#F2C14E"), rough=0.6), room)
-    _mesh("Notebook", [_box((-0.98, 0.05, 0.765), (0.22, 0.16, 0.03), bevel=0.004, rot=(0, 0, 12))],
-          _mat("M_Notebook", hx("#E85D8C"), rough=0.7), room)
 
-    # 6. Lighting: remove the desk lamp / monitor glow, add the neon pink spill
+    # 6. Lighting
     for name in ("Fill_MonitorGlow", "Practical_DeskLamp"):
         o = bpy.data.objects.get(name)
         if o:
@@ -274,27 +369,33 @@ def apply_classroom_set():
     _area("Neon_PinkSpill_L", lc, (-1.10, 0.95, 1.9), (-0.4, 0.0, 1.2), hx("#FF4FB0"), 25, 0.4)
     _area("Neon_PinkSpill_R", lc, (1.10, 0.95, 1.9), (0.8, 0.0, 1.2), hx("#FF4FB0"), 22, 0.4)
     _area("Board_Fill", lc, (-0.10, -0.80, 2.30), tuple(BOARD), (1.0, 0.92, 0.82), 40, 1.0)
+    _area("Room_Fill", lc, (0.6, -2.0, 1.2), (0.3, 0.2, 0.6), (0.85, 0.80, 1.0), 30, 2.0)
     k = bpy.data.objects.get("Key_MayaWarm")
     head = MAYA + Vector((0, 0, 1.36))
     if k:
         k.location = head + Vector((-0.55, -0.55, 0.30))
         k.rotation_euler = (head - k.location).to_track_quat("-Z", "Y").to_euler()
+    claude = Vector((PODIUM.x, PODIUM.y, top + 0.12))
     rim = bpy.data.objects.get("Rim_MascotWarm")
     if rim:
-        tgt = Vector((BOOKS.x, BOOKS.y, top + 0.12))
-        rim.location = tgt + Vector((0.35, 0.35, 0.40))
-        rim.rotation_euler = (tgt - rim.location).to_track_quat("-Z", "Y").to_euler()
+        rim.location = claude + Vector((0.35, 0.35, 0.40))
+        rim.rotation_euler = (claude - rim.location).to_track_quat("-Z", "Y").to_euler()
     key = bpy.data.objects.get("Key_DeskWarm")
     if key:
         key.location = (0.2, -1.4, 2.0)
         key.rotation_euler = (Vector((-0.2, 0.2, 1.0)) - key.location).to_track_quat("-Z", "Y").to_euler()
 
-    # 7. Cameras
-    claude = Vector((BOOKS.x, BOOKS.y, top + 0.12))
-    _aim_cam("Cam_Wide", (0.12, -2.55, 1.32), (0.10, 0.30, 1.22), 30, 4.0)
-    _aim_cam("Cam_Mascot", claude + Vector((0.32, -0.95, 0.10)), claude + Vector((0.05, 0.0, 0.04)), 38, 1.8,
+    # 7. Cameras (four shots, like the reference): wide, board, Claude, Maya
+    if "Cam_Board" not in bpy.data.objects:
+        cd = bpy.data.cameras.new("Cam_Board")
+        cb = bpy.data.objects.new("Cam_Board", cd)
+        (bpy.data.collections.get("Cameras") or sc.collection).objects.link(cb)
+        cd.sensor_fit = bpy.data.objects["Cam_Wide"].data.sensor_fit
+    _aim_cam("Cam_Wide", (-0.06, -2.50, 1.05), (-0.06, 0.30, 1.28), 22, 4.0)                  # low wide: board high
+    _aim_cam("Cam_Board", (-0.50, -1.80, 1.05), (-0.38, 0.45, 1.36), 26, 4.0)               # board + Claude pointing
+    _aim_cam("Cam_Mascot", claude + Vector((0.30, -0.85, -0.04)), claude + Vector((0.08, 0.0, 0.12)), 36, 1.8,
              focus=bpy.data.objects.get("Mascot_FocusTarget"))
-    _aim_cam("Cam_Human", head + Vector((-0.95, -1.15, -0.06)), head + Vector((0.0, 0.0, -0.20)), 40, 1.8,
+    _aim_cam("Cam_Human", head + Vector((-0.95, -1.15, -0.12)), head + Vector((0.0, 0.0, -0.14)), 40, 1.8,
              focus=bpy.data.objects.get("Human_FocusTarget"))
 
 

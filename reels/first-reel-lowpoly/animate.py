@@ -24,7 +24,7 @@ import random
 import sys
 
 import bpy
-from mathutils import Vector
+from mathutils import Quaternion, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BLENDER_DIR = os.path.normpath(os.path.join(HERE, "..", "..", "blender"))
@@ -316,8 +316,237 @@ def style_for_episode():
             del cam["base_lens"]
 
 
+# ---------------------------------------------------------------- classroom board
+MARKER = {"blue": (47, 95, 208), "red": (216, 58, 58), "green": (46, 158, 91), "black": (34, 34, 34)}
+
+
+def classroom_board():
+    """Classroom set: the whiteboard is written on line by line (marker handwriting,
+    strike-throughs, little drawings, arrows, wipes) from the episode's BOARD list, and
+    Claude's pointer swings to whatever was just written.
+    BOARD entries: (line_index, seconds_into_line, op, ...)
+      ("title", text)                       title + underline across the top
+      ("write", id, text, (u, v), colour[, size])   words, u/v in 0..1 of the board
+      ("strike", id)                        red line through an item
+      ("draw", id, kind, (u, v), size[, colour])    kind: stick | box | circle | check
+      ("arrow", id, (u0, v0), (u1, v1), colour)
+      ("wipe",)                             eraser clears the board"""
+    sc = bpy.context.scene
+    if sc.get("set") != "classroom":
+        return
+    sp = os.path.join(EP_DIR, "script.py")
+    events = []
+    if os.path.exists(sp):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("ep_board", sp)
+        mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+        events = list(getattr(mod, "BOARD", []))
+    from PIL import Image, ImageDraw, ImageFont
+    W, H = 1400, 990
+    font_path = sc.get("board_font")
+    fonts = {}
+
+    def font(size):
+        if size not in fonts:
+            fonts[size] = ImageFont.truetype(font_path, size)
+        return fonts[size]
+
+    # ---- timeline of states: each event becomes a few reveal steps
+    steps = []                                   # (time, op, args, progress)
+    for ev in events:
+        line, dt, op, *args = ev
+        t0 = LINES[line]["t"] + dt
+        if op in ("write", "title"):
+            text = args[1] if op == "write" else args[0]
+            dur, n = min(1.4, 0.06 * len(text) + 0.25), 6
+        elif op == "wipe":
+            dur, n = 0.6, 4
+        else:
+            dur, n = 0.45, 4
+        for k in range(1, n + 1):
+            steps.append((t0 + dur * k / n, op, args, k / n))
+    steps.sort(key=lambda x: x[0])
+
+    items = {}                                   # id -> dict
+    order = []
+
+    def bbox(it):
+        if it["op"] in ("write", "title"):
+            f = font(it["size"])
+            x0, y0, x1, y1 = f.getbbox(it["text"])
+            cx, cy = it["xy"]
+            if it["op"] == "title":
+                return (cx - (x1 - x0) / 2, cy - (y1 - y0) / 2 - 8, cx + (x1 - x0) / 2, cy + (y1 - y0) / 2 + 8)
+            return (cx, cy - (y1 - y0) / 2 - 6, cx + (x1 - x0), cy + (y1 - y0) / 2 + 6)
+        if it["op"] == "draw":
+            cx, cy = it["xy"]; r = it["size"]
+            return (cx - r, cy - r, cx + r, cy + r)
+        if it["op"] == "arrow":
+            (x0, y0), (x1, y1) = it["p0"], it["p1"]
+            return (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+        return (0, 0, 0, 0)
+
+    def render(path, wipe_band=None):
+        img = Image.new("RGB", (W, H), (246, 246, 242))
+        d = ImageDraw.Draw(img)
+        for iid in order:
+            it = items[iid]
+            p = it["p"]
+            col = MARKER.get(it.get("col", "black"), (34, 34, 34))
+            if it["op"] in ("write", "title"):
+                f = font(it["size"])
+                layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+                ld = ImageDraw.Draw(layer)
+                anchor = "mm" if it["op"] == "title" else "lm"
+                ld.text(it["xy"], it["text"], font=f, fill=(*col, 255), anchor=anchor, stroke_width=3, stroke_fill=(*col, 255))   # marker weight
+                x0, y0, x1, y1 = bbox(it)
+                cut = int(x0 + (x1 - x0) * min(1.0, p * 1.05))
+                if p < 1:
+                    layer.paste((0, 0, 0, 0), (max(0, cut), 0, W, H))
+                img.paste(layer, (0, 0), layer)
+                if it["op"] == "title":
+                    ux = 120 + (W - 240) * min(1.0, max(0.0, p * 1.4 - 0.4))
+                    if ux > 120:
+                        d.line((120, y1 + 18, ux, y1 + 18), fill=(34, 34, 34), width=10)
+            elif it["op"] == "draw":
+                cx, cy = it["xy"]; r = it["size"]; w = 11
+                if it["kind"] == "stick":
+                    strokes = [("ell", (cx - r * 0.28, cy - r, cx + r * 0.28, cy - r * 0.45)),
+                               ("ln", (cx, cy - r * 0.45, cx, cy + r * 0.35)),
+                               ("ln", (cx - r * 0.45, cy - r * 0.15, cx + r * 0.45, cy - r * 0.15)),
+                               ("ln", (cx, cy + r * 0.35, cx - r * 0.35, cy + r)),
+                               ("ln", (cx, cy + r * 0.35, cx + r * 0.35, cy + r))]
+                elif it["kind"] == "box":
+                    strokes = [("ln", (cx - r, cy - r * 0.8, cx + r, cy - r * 0.8)), ("ln", (cx - r * 0.85, cy - r * 0.8, cx - r * 0.85, cy + r)),
+                               ("ln", (cx + r * 0.85, cy - r * 0.8, cx + r * 0.85, cy + r)), ("ln", (cx - r * 0.85, cy + r, cx + r * 0.85, cy + r))]
+                elif it["kind"] == "circle":
+                    strokes = [("ell", (cx - r, cy - r, cx + r, cy + r))]
+                else:                                       # check mark
+                    strokes = [("ln", (cx - r, cy, cx - r * 0.3, cy + r * 0.7)), ("ln", (cx - r * 0.3, cy + r * 0.7, cx + r, cy - r * 0.8))]
+                n = max(1, int(round(len(strokes) * p)))
+                for kind, xy in strokes[:n]:
+                    if kind == "ell":
+                        d.ellipse(xy, outline=col, width=w)
+                    else:
+                        d.line(xy, fill=col, width=w)
+            elif it["op"] == "arrow":
+                (x0, y0), (x1, y1) = it["p0"], it["p1"]
+                ex, ey = x0 + (x1 - x0) * p, y0 + (y1 - y0) * p
+                d.line((x0, y0, ex, ey), fill=col, width=11)
+                if p >= 1:
+                    ang = math.atan2(y1 - y0, x1 - x0)
+                    for da in (2.6, -2.6):
+                        d.line((x1, y1, x1 + 42 * math.cos(ang + da), y1 + 42 * math.sin(ang + da)), fill=col, width=11)
+            if it.get("strike", 0) > 0:
+                x0, y0, x1, y1 = bbox(it)
+                ym = (y0 + y1) / 2
+                d.line((x0 - 8, ym, x0 - 8 + (x1 - x0 + 16) * it["strike"], ym), fill=MARKER["red"], width=12)
+        if wipe_band is not None:                           # eraser sweeping across
+            d.rectangle((0, 0, int(W * wipe_band), H), fill=(246, 246, 242))
+        img.save(path)
+
+    out = os.path.join(EP_DIR, "board")
+    seq = os.path.join(out, "seq")
+    os.makedirs(seq, exist_ok=True)
+    for fn in os.listdir(seq):
+        os.remove(os.path.join(seq, fn))
+    states = []                                  # (time, png)
+    first = os.path.join(out, "state_000.png")
+    render(first)
+    states.append((0.0, first))
+    targets = []                                 # (time, (u, v)) - where the pointer goes
+    for k, (t, op, args, p) in enumerate(steps):
+        band = None
+        if op == "title":
+            it = items.setdefault("_title", {"op": "title", "text": args[0], "size": 104, "xy": (W / 2, 105), "p": 0})
+            if "_title" not in order:
+                order.insert(0, "_title")
+            it["p"] = p
+        elif op == "write":
+            iid, text, uv, col, *rest = args
+            if iid not in items:
+                items[iid] = {"op": "write", "text": text, "size": rest[0] if rest else 96, "col": col,
+                              "xy": (uv[0] * W, uv[1] * H), "p": 0}
+                order.append(iid)
+                targets.append((t, uv))
+            items[iid]["p"] = p
+        elif op == "strike":
+            items[args[0]]["strike"] = p
+            if p == 1.0 or len(targets) == 0 or targets[-1][1] != items[args[0]]["xy"]:
+                it = items[args[0]]
+                targets.append((t, (it["xy"][0] / W + 0.06, it["xy"][1] / H)))
+        elif op == "draw":
+            iid, kind, uv, size, *rest = args
+            if iid not in items:
+                items[iid] = {"op": "draw", "kind": kind, "xy": (uv[0] * W, uv[1] * H), "size": size,
+                              "col": rest[0] if rest else "black", "p": 0}
+                order.append(iid)
+                targets.append((t, uv))
+            items[iid]["p"] = p
+        elif op == "arrow":
+            iid, p0, p1, col = args
+            if iid not in items:
+                items[iid] = {"op": "arrow", "p0": (p0[0] * W, p0[1] * H), "p1": (p1[0] * W, p1[1] * H), "col": col, "p": 0}
+                order.append(iid)
+                targets.append((t, p1))
+            items[iid]["p"] = p
+        elif op == "wipe":
+            band = p
+            if p >= 1.0:
+                items.clear(); order.clear(); band = None
+        path = os.path.join(out, f"state_{k + 1:03d}.png")
+        render(path, band)
+        states.append((t, path))
+
+    # one image per frame (symlinks to the state shown at that frame) -> image sequence
+    si = 0
+    for f in range(1, LAST_FRAME + 1):
+        t = (f - 1) / FPS
+        while si + 1 < len(states) and states[si + 1][0] <= t:
+            si += 1
+        os.symlink(os.path.abspath(states[si][1]), os.path.join(seq, f"{f:04d}.png"))
+    mat = bpy.data.materials.get("M_Board_Face")
+    tex = mat.node_tree.nodes.get("BoardImage")
+    img = bpy.data.images.load(os.path.join(seq, "0001.png"), check_existing=False)
+    img.source = "SEQUENCE"
+    tex.image = img
+    tex.image_user.frame_duration = LAST_FRAME
+    tex.image_user.frame_start = 1
+    tex.image_user.frame_offset = 0
+    tex.image_user.use_auto_refresh = True
+
+    # ---- pointer: swings to the newest item, taps while Claude talks
+    ptr = bpy.data.objects.get("Claude_Pointer")
+    if not ptr:
+        return
+    bx, by, bz, bw, bh = sc["board_geom"]
+    pivot = Vector(sc["pointer_pivot"])
+
+    def world(uv):
+        return Vector((bx + (uv[0] - 0.5) * bw, by, bz + (0.5 - uv[1]) * bh))
+    rest_uv = (0.25, 0.85)
+    prev_q = None
+    for f in range(1, LAST_FRAME + 1, 1):
+        t = (f - 1) / FPS
+        cur = rest_uv
+        t_set, prev_uv = 0.0, rest_uv
+        for tt, uv in targets:
+            if tt - 0.35 <= t:                     # lead the writing a little
+                prev_uv, cur, t_set = cur, uv, tt - 0.35
+        k = ease((t - t_set) / 0.4)
+        uv = (prev_uv[0] + (cur[0] - prev_uv[0]) * k, prev_uv[1] + (cur[1] - prev_uv[1]) * k)
+        d = (world(uv) - pivot).normalized()
+        q = Vector((0, 0, 1)).rotation_difference(d)
+        cl = speaking(t, "C")
+        if cl:                                     # little teaching taps while he talks
+            side = d.cross(Vector((0, 0, 1))).normalized()
+            q = Quaternion(side, 0.035 * math.sin(t * 9.0)) @ q
+        ptr.rotation_quaternion = q
+        ptr.keyframe_insert("rotation_quaternion", frame=f)
+
+
 # ---------------------------------------------------------------- animation
-SHOT_CAM = {"maya": "Cam_Human", "claude": "Cam_Mascot", "wide": "Cam_Wide"}
+SHOT_CAM = {"maya": "Cam_Human", "claude": "Cam_Mascot", "wide": "Cam_Wide", "board": "Cam_Board"}
 
 
 def animate():
@@ -362,6 +591,7 @@ def animate():
             cam.data.lens = base
             cam.data.keyframe_insert("lens", frame=start - 1)
     sc.camera = bpy.data.objects[SHOT_CAM[segs[0][1]]]
+    classroom_board()
 
     head = bpy.data.objects["Human_Head"]
     brows = bpy.data.objects["Human_Eyebrows"]
