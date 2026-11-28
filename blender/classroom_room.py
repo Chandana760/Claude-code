@@ -133,10 +133,10 @@ def board_texture(path, title="", lines=()):
 
 # Layout (metres)
 DESK_X = -0.48                                  # desk slides left; Maya's chair sits at the right
-PODIUM = Vector((-0.84, -0.04, 0.75))           # Claude's little wooden step podium on the desk
+PODIUM = Vector((-0.84, -0.04, 0.80))           # Claude's little wooden step podium on the desk
 BOARD = Vector((-0.10, 0.55, 1.62))             # whiteboard centre (on its easel)
 BOARD_W, BOARD_H = 1.10, 0.78
-MAYA = Vector((0.74, -0.04, 0.0))                # her chair
+MAYA = Vector((0.56, -0.04, 0.0))                # her chair
 MAYA_YAW = -92                                  # turned toward the board / Claude
 FONT_HAND = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "PatrickHand-Regular.ttf")
 
@@ -201,13 +201,13 @@ def build_chair(root, coll):
     seat = [_box((0, 0.06, 0.505), (0.50, 0.46, 0.08), bevel=0.035),               # padded seat
             _box((0, -0.16, 0.49), (0.48, 0.06, 0.06), bevel=0.025, rot=(-25, 0, 0))]  # waterfall front edge
     back = []
-    for k, (y, z, h, tilt) in enumerate(((0.30, 0.66, 0.16, -2), (0.32, 0.80, 0.16, -8), (0.345, 0.95, 0.18, -14))):
+    for k, (y, z, h, tilt) in enumerate(((0.22, 0.66, 0.16, -2), (0.24, 0.80, 0.16, -8), (0.265, 0.95, 0.18, -14))):
         back.append(_box((0, y, z), (0.46 - 0.02 * k, 0.07, h), bevel=0.03, rot=(tilt, 0, 0)))   # lumbar -> upper back curve
     _mesh("Maya_Chair_Cushions", seat + back, up, coll, parent=root)
     parts = [_cyl((0, 0.06, 0.46), (0, 0.06, 0.16), 0.03),                          # gas lift
              _cyl((0, 0.06, 0.16), (0, 0.06, 0.10), 0.045),
              _box((0, 0.06, 0.455), (0.26, 0.24, 0.03)),                           # seat mechanism
-             _box((0, 0.27, 0.55), (0.06, 0.05, 0.14), rot=(-10, 0, 0))]            # back bracket
+             _box((0, 0.19, 0.55), (0.06, 0.05, 0.14), rot=(-10, 0, 0))]            # back bracket
     for sx in (1, -1):                                                              # armrests
         parts += [_box((sx * 0.27, 0.12, 0.56), (0.035, 0.05, 0.16)),
                   _box((sx * 0.27, 0.06, 0.645), (0.07, 0.28, 0.035), bevel=0.014)]
@@ -237,6 +237,7 @@ def apply_classroom_set():
                 bpy.data.objects.remove(o, do_unlink=True)
     desk = bpy.data.objects["Desk"]
     desk.location.x = DESK_X
+    desk.location.z = 0.05                                   # a touch higher: her crossed arms rest on it
     top_ob = bpy.data.objects.get("Desk_Top")
     if top_ob:
         top_ob.scale.x = 0.80                                  # shorter desk: she sits right at its end
@@ -244,12 +245,12 @@ def apply_classroom_set():
     if old_legs:
         legs_mat = old_legs.data.materials[0]
         bpy.data.objects.remove(old_legs, do_unlink=True)
-        _mesh("Desk_Legs", [_box((DESK_X + (0.34 if sx > 0 else -0.56), sy * 0.27, 0.35), (0.05, 0.05, 0.70)) for sx in (1, -1) for sy in (1, -1)],
+        _mesh("Desk_Legs", [_box((DESK_X + (0.34 if sx > 0 else -0.56), sy * 0.27, 0.375), (0.05, 0.05, 0.75)) for sx in (1, -1) for sy in (1, -1)],
               legs_mat, room)
     mug = bpy.data.objects.get("Mug")
     if mug:
-        mug.location.x, mug.location.y = -1.06, -0.14
-    PX, PY, PZ = 0.04, 0.02, 0.75
+        mug.location.x, mug.location.y, mug.location.z = -1.06, -0.14, 0.80
+    PX, PY, PZ = -0.10, 0.12, 0.80
     _mesh("Pencil_Cup", [lambda bm: bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=12, radius1=0.042,
                                                           radius2=0.046, depth=0.11, matrix=Matrix.Translation((PX, PY, PZ + 0.055)))],
           _mat("M_PencilCup", hx("#3E5C76"), rough=0.6), room)
@@ -257,8 +258,8 @@ def apply_classroom_set():
             for (dx, dy), c in (((0.012, 0.0), "#F2C14E"), ((-0.011, 0.01), "#E24B5B"), ((0.0, -0.013), "#3D7DD8"))]
     for k, (b, c) in enumerate(pens):
         _mesh(f"Pen_{k}", [b], _mat(f"M_Pen_{k}", hx(c), rough=0.5), room)
-    _mesh("Notebook", [_box((-0.16, -0.12, 0.765), (0.22, 0.16, 0.03), bevel=0.004, rot=(0, 0, 6)),
-                       _box((-0.155, -0.12, 0.79), (0.20, 0.15, 0.02), bevel=0.004, rot=(0, 0, -4))],
+    _mesh("Notebook", [_box((-0.36, -0.14, 0.815), (0.22, 0.16, 0.03), bevel=0.004, rot=(0, 0, 6)),
+                       _box((-0.355, -0.14, 0.84), (0.20, 0.15, 0.02), bevel=0.004, rot=(0, 0, -4))],
           _mat("M_Notebook", hx("#7FB7A4"), rough=0.7), room)
 
     # 2. Claude on a small wooden step podium, with his teaching pointer
@@ -343,7 +344,7 @@ def apply_classroom_set():
     root.rotation_euler = (0, 0, R(MAYA_YAW))
     build_seated_body(root, chars)
     build_chair(root, chars)
-    sc["head_pose_offset"] = (R(-8), 0.0, R(16))        # chin up a touch, eyes on the board (cancels the desk-set turn)
+    sc["head_pose_offset"] = (R(-8), 0.0, R(30))        # chin up a touch, eyes on the board (cancels the desk-set turn)
 
     # 5. Room dressing: bookshelf, ivy, pink neon strips
     shelf_m = _mat("M_Shelf_Wood", (0.16, 0.08, 0.04), rough=0.7)
@@ -428,7 +429,7 @@ def apply_classroom_set():
         cb = bpy.data.objects.new("Cam_Board", cd)
         (bpy.data.collections.get("Cameras") or sc.collection).objects.link(cb)
         cd.sensor_fit = bpy.data.objects["Cam_Wide"].data.sensor_fit
-    _aim_cam("Cam_Wide", (0.62, -2.10, 1.00), (0.02, 0.35, 1.26), 22, 4.0)                  # low wide: board high
+    _aim_cam("Cam_Wide", (0.72, -2.05, 1.00), (0.0, 0.35, 1.26), 22, 4.0)                  # low wide: board high
     _aim_cam("Cam_Board", (0.32, -1.70, 1.08), (-0.18, 0.45, 1.38), 23, 4.0)               # board + Claude pointing
     _aim_cam("Cam_Mascot", claude + Vector((0.30, -0.85, -0.04)), claude + Vector((0.08, 0.0, 0.12)), 36, 1.8,
              focus=bpy.data.objects.get("Mascot_FocusTarget"))
