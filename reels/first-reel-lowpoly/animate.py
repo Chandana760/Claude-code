@@ -320,6 +320,9 @@ def style_for_episode():
 MARKER = {"blue": (47, 95, 208), "red": (216, 58, 58), "green": (46, 158, 91), "black": (34, 34, 34)}
 
 
+POINTER_Q = {}
+
+
 def classroom_board():
     """Classroom set: the whiteboard is written on line by line (marker handwriting,
     strike-throughs, little drawings, arrows, wipes) from the episode's BOARD list, and
@@ -515,6 +518,7 @@ def classroom_board():
     tex.image_user.frame_offset = 0
     tex.image_user.use_auto_refresh = True
 
+    sc["board_times"] = [tt for tt, _uv in targets]           # Claude turns to the board as these are written
     # ---- pointer: swings to the newest item, taps while Claude talks
     ptr = bpy.data.objects.get("Claude_Pointer")
     if not ptr:
@@ -541,8 +545,7 @@ def classroom_board():
         if cl:                                     # little teaching taps while he talks
             side = d.cross(Vector((0, 0, 1))).normalized()
             q = Quaternion(side, 0.035 * math.sin(t * 9.0)) @ q
-        ptr.rotation_quaternion = q
-        ptr.keyframe_insert("rotation_quaternion", frame=f)
+        POINTER_Q[f] = q                           # world aim; keyed in the main loop (counter to Claude's turn)
 
 
 # ---------------------------------------------------------------- animation
@@ -646,6 +649,8 @@ def animate():
         return 0.0
 
     classroom = bpy.context.scene.get("set") == "classroom"
+    board_times = list(bpy.context.scene.get("board_times", [])) if classroom else []
+    pointer = bpy.data.objects.get("Claude_Pointer") if classroom else None
     for f in range(1, LAST_FRAME + 1):
         t = (f - 1) / FPS
 
@@ -813,8 +818,16 @@ def animate():
         root["hop"], root["tilt"], root["squash"] = clamp(hop), clamp(tilt, -1, 1), clamp(squash, -1, 1)
         for p in ("hop", "tilt", "squash"):
             root.keyframe_insert(f'["{p}"]', frame=f)
+        if board_times:                               # classroom: turns to the board while it's written, else faces camera
+            wb = 0.0
+            for tt in board_times:
+                wb = max(wb, ease((t - tt + 0.55) / 0.35) * (1 - ease((t - tt - 1.3) / 0.45)))
+            rz += math.radians(35) * wb
         root.rotation_euler.z = rz + jr
         root.keyframe_insert("rotation_euler", index=2, frame=f)
+        if f in POINTER_Q and pointer:                # pointer stays on the board item however Claude turns
+            pointer.rotation_quaternion = Quaternion((0, 0, 1), -(rz + jr - root_rz)) @ POINTER_Q[f]
+            pointer.keyframe_insert("rotation_quaternion", frame=f)
         root.location = root_loc + Vector((jx, jy, 0.0))
         root.keyframe_insert("location", frame=f)
         eyes.scale = (1.0, 1.0, eye_z)
