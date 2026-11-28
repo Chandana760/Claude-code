@@ -354,7 +354,7 @@ def apply_classroom_set():
             open over the tee at the front, flat facets like the rest of her jacket."""
             rings_def = ((0.60, 0.185, 0.150, 0.030), (0.70, 0.215, 0.165, 0.020), (0.84, 0.250, 0.185, 0.010),
                          (0.98, 0.262, 0.182, 0.000), (1.08, 0.235, 0.155, 0.000), (1.15, 0.150, 0.110, 0.000))
-            seg = 16
+            seg = 14
             rings = []
             for z, rx, ry, yc in rings_def:
                 rings.append([bm.verts.new((rx * math.sin(2 * math.pi * k / seg), yc + ry * math.cos(2 * math.pi * k / seg), z))
@@ -394,9 +394,7 @@ def apply_classroom_set():
         for v in hands.data.vertices:                    # the top forearm's hand moves with it
             if (v.co - Vector((0.175, -0.345, 0.905))).length < 0.07:
                 v.co += Vector((0.0, -0.022, 0.03))
-        jb = _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)
-        for p in jb.data.polygons:                  # soft shading: no jagged seam where her sleeves meet it
-            p.use_smooth = True
+        _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)   # low-poly facets, like the rest of her
     build_chair(root, chars)
     sc["head_pose_offset"] = (R(-8), 0.0, R(30))        # chin up a touch, eyes on the board (cancels the desk-set turn)
 
