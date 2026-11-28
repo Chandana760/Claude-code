@@ -352,8 +352,8 @@ def apply_classroom_set():
         def jacket_body(bm):
             """Tailored jacket body: elliptical rings lofted waist -> chest -> shoulders,
             open over the tee at the front, flat facets like the rest of her jacket."""
-            rings_def = ((0.60, 0.185, 0.150, 0.030), (0.70, 0.215, 0.165, 0.020), (0.84, 0.245, 0.185, 0.010),
-                         (0.98, 0.250, 0.180, 0.000), (1.09, 0.215, 0.150, 0.000), (1.15, 0.150, 0.110, 0.000))
+            rings_def = ((0.60, 0.185, 0.150, 0.030), (0.70, 0.215, 0.165, 0.020), (0.84, 0.250, 0.185, 0.010),
+                         (0.98, 0.262, 0.182, 0.000), (1.08, 0.235, 0.155, 0.000), (1.15, 0.150, 0.110, 0.000))
             seg = 16
             rings = []
             for z, rx, ry, yc in rings_def:
@@ -367,7 +367,29 @@ def apply_classroom_set():
                         continue
                     bm.faces.new((rings[r][k], rings[r][k2], rings[r + 1][k2], rings[r + 1][k]))
             bm.faces.new(list(reversed(rings[0])))
-        _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)   # faceted like the rest of her jacket
+        # her front jacket panels + shoulder pieces keep only their front halves (front look unchanged);
+        # the tailored body below forms the back and sides as one clean surface
+        body = bpy.data.objects["Human_Body"]
+        bmb = bmesh.new(); bmb.from_mesh(body.data); bmb.verts.ensure_lookup_table()
+        seen, drop = set(), []
+        for v in bmb.verts:
+            if v.index in seen:
+                continue
+            comp, stack = [], [v]; seen.add(v.index)
+            while stack:
+                x = stack.pop(); comp.append(x)
+                for e in x.link_edges:
+                    o = e.other_vert(x)
+                    if o.index not in seen:
+                        seen.add(o.index); stack.append(o)
+            c = sum((p.co for p in comp), Vector()) / len(comp)
+            if abs(c.y) < 0.03 and c.z > 0.85:                 # torso panel or shoulder ball (sleeves sit forward)
+                drop += [p for p in comp if p.co.y > 0.01]
+        bmesh.ops.delete(bmb, geom=drop, context="VERTS")
+        bmb.to_mesh(body.data); bmb.free()
+        jb = _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)
+        for p in jb.data.polygons:                  # soft shading: no jagged seam where her sleeves meet it
+            p.use_smooth = True
     build_chair(root, chars)
     sc["head_pose_offset"] = (R(-8), 0.0, R(30))        # chin up a touch, eyes on the board (cancels the desk-set turn)
 
