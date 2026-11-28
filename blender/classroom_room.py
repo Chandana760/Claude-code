@@ -136,7 +136,7 @@ DESK_X = -0.48                                  # desk slides left; Maya's chair
 PODIUM = Vector((-0.84, -0.04, 0.80))           # Claude's little wooden step podium on the desk
 BOARD = Vector((-0.10, 0.55, 1.62))             # whiteboard centre (on its easel)
 BOARD_W, BOARD_H = 1.10, 0.78
-MAYA = Vector((0.56, -0.04, 0.0))                # her chair
+MAYA = Vector((0.50, -0.04, 0.0))                # her chair
 MAYA_YAW = -92                                  # turned toward the board / Claude
 FONT_HAND = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "PatrickHand-Regular.ttf")
 
@@ -175,7 +175,7 @@ def build_seated_body(root, coll):
     shoe = _mat("M_Char_Sneaker", hx("#EEE7DA"), rough=0.6)
     sole = _mat("M_Char_SneakerSole", hx("#B9AFA2"), rough=0.7)
     legs = []
-    legs.append(_box((0, 0.02, 0.63), (0.40, 0.36, 0.20), bevel=0.06))       # hips / seat of the trousers
+    legs.append(_box((0, 0.02, 0.63), (0.34, 0.30, 0.14), bevel=0.05))       # hips (inside the jacket)
     for sx in (1, -1):
         x = sx * 0.105
         legs.append(_tube([(x, 0.02, 0.62), (x, -0.20, 0.615), (x * 1.04, -0.40, 0.60)], 0.095, 0.085))   # thigh
@@ -343,42 +343,20 @@ def apply_classroom_set():
     root.location = MAYA
     root.rotation_euler = (0, 0, R(MAYA_YAW))
     build_seated_body(root, chars)
-    # her back is on camera in this set: one smooth, rounded jacket back over the panel seam
-    # and the shoulder/sleeve shapes
+    # seen from the side/back in this set: one continuous, smooth jacket body from the seat to
+    # the shoulders (open at the front over her tee) so no seams or trouser block show.
+    # Her own crossed arms stay exactly as they are and rest on the end of the desk.
     cloth = bpy.data.materials.get("M_Char_Outfit")
     if cloth:
-        def back_shell(bm):
+        def jacket_body(bm):
             vs = bmesh.ops.create_icosphere(bm, subdivisions=3, radius=0.20,
-                                            matrix=Matrix.LocRotScale(Vector((0, 0.03, 0.93)), None,
-                                                                      Vector((1.42, 1.02, 1.24))))["verts"]
-            bmesh.ops.delete(bm, geom=[v for v in vs if v.co.y < 0.0 or v.co.z < 0.62], context="VERTS")
-        shell = _mesh("Human_JacketBack", [back_shell], cloth, chars, parent=root)
-        for p in shell.data.polygons:
+                                            matrix=Matrix.LocRotScale(Vector((0, 0.01, 0.90)), None,
+                                                                      Vector((1.30, 1.05, 1.42))))["verts"]
+            cut = [v for v in vs if v.co.z < 0.58 or v.co.z > 1.10 or (v.co.y < -0.12 and abs(v.co.x) < 0.10 and v.co.z > 0.66)]
+            bmesh.ops.delete(bm, geom=cut, context="VERTS")
+        jb = _mesh("Human_JacketBody", [jacket_body], cloth, chars, parent=root)
+        for p in jb.data.polygons:
             p.use_smooth = True
-    # Arms for this set: one forearm resting on the desk (hand flat on it), the other hand in her lap
-    def rebuild(name, builders):
-        ob = bpy.data.objects[name]
-        bm = bmesh.new()
-        for bld in builders:
-            bld(bm)
-        me = bpy.data.meshes.new(name)
-        bm.to_mesh(me); bm.free()
-        for m in ob.data.materials:
-            me.materials.append(m)
-        for p in me.polygons:
-            p.use_smooth = False
-        ob.data = me
-    torso = [_ico((sx * 0.125, -0.002, 0.95), 0.20, scale=(0.62, 0.9, 1.15), sub=2) for sx in (1, -1)]
-    torso += [_ico((sx * 0.20, 0.0, 1.06), 0.10, sub=2) for sx in (1, -1)]
-    arm_desk = [_tube([(0.22, -0.02, 1.05), (0.25, -0.16, 0.97), (0.26, -0.30, 0.90)], 0.088, 0.08, seg=12),
-                _ico((0.26, -0.31, 0.895), 0.082, sub=2),
-                _tube([(0.26, -0.32, 0.89), (0.16, -0.45, 0.885), (0.06, -0.55, 0.88)], 0.074, 0.066, seg=12)]
-    arm_lap = [_tube([(-0.22, -0.02, 1.05), (-0.27, -0.06, 0.92), (-0.28, -0.12, 0.80)], 0.088, 0.08, seg=12),
-               _ico((-0.28, -0.125, 0.795), 0.082, sub=2),
-               _tube([(-0.28, -0.13, 0.79), (-0.22, -0.24, 0.75), (-0.13, -0.32, 0.745)], 0.074, 0.066, seg=12)]
-    rebuild("Human_Body", torso + arm_desk + arm_lap)
-    rebuild("Human_Hands", [_ico((0.03, -0.585, 0.86), 0.046, scale=(1.15, 1.0, 0.62), sub=2),     # flat on the desk
-                            _ico((-0.10, -0.345, 0.73), 0.046, scale=(1.1, 1.0, 0.72), sub=2)])    # resting in her lap
     build_chair(root, chars)
     sc["head_pose_offset"] = (R(-8), 0.0, R(30))        # chin up a touch, eyes on the board (cancels the desk-set turn)
 
