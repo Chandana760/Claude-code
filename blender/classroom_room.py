@@ -136,8 +136,8 @@ DESK_X = -0.48                                  # desk slides left; Maya's chair
 PODIUM = Vector((-0.84, -0.04, 0.75))           # Claude's little wooden step podium on the desk
 BOARD = Vector((-0.10, 0.55, 1.62))             # whiteboard centre (on its easel)
 BOARD_W, BOARD_H = 1.10, 0.78
-MAYA = Vector((0.62, -0.10, 0.0))                # her chair
-MAYA_YAW = -62                                  # turned toward the board / Claude
+MAYA = Vector((0.74, -0.04, 0.0))                # her chair
+MAYA_YAW = -92                                  # turned toward the board / Claude
 FONT_HAND = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "PatrickHand-Regular.ttf")
 
 
@@ -193,20 +193,33 @@ def build_seated_body(root, coll):
 
 
 def build_chair(root, coll):
-    """Simple classroom chair she sits on (mustard seat + back, dark steel legs)."""
-    up = _mat("M_Chair_Mustard", hx("#D6A23A"), rough=0.75)
-    frame = _mat("M_Chair_Frame", hx("#2A2A30"), rough=0.45)
-    _mesh("Maya_Chair_Seat", [
-        _box((0, 0.06, 0.485), (0.46, 0.44, 0.045), bevel=0.015),                 # seat
-        _box((0, 0.30, 0.80), (0.44, 0.035, 0.30), bevel=0.012, rot=(-6, 0, 0)),   # back panel
-    ], up, coll, parent=root)
-    parts = []
-    for sx in (1, -1):
-        for sy, top in ((-0.13, 0.46), (0.25, 0.46)):
-            parts.append(_box((sx * 0.20, 0.06 + sy, top / 2), (0.032, 0.032, top)))      # four legs
-        parts.append(_box((sx * 0.20, 0.29, 0.66), (0.03, 0.03, 0.40), rot=(-6, 0, 0)))  # back uprights
-        parts.append(_box((sx * 0.20, 0.06, 0.16), (0.02, 0.38, 0.02)))                 # side rail
+    """Ergonomic office chair: padded waterfall seat, lumbar-curved back, armrests,
+    gas lift and a five-star base on caster wheels (mustard upholstery, graphite frame)."""
+    up = _mat("M_Chair_Mustard", hx("#D6A23A"), rough=0.8)
+    frame = _mat("M_Chair_Frame", hx("#2B2B31"), rough=0.4)
+    wheel = _mat("M_Chair_Wheel", hx("#151518"), rough=0.5)
+    seat = [_box((0, 0.06, 0.505), (0.50, 0.46, 0.08), bevel=0.035),               # padded seat
+            _box((0, -0.16, 0.49), (0.48, 0.06, 0.06), bevel=0.025, rot=(-25, 0, 0))]  # waterfall front edge
+    back = []
+    for k, (y, z, h, tilt) in enumerate(((0.30, 0.66, 0.16, -2), (0.32, 0.80, 0.16, -8), (0.345, 0.95, 0.18, -14))):
+        back.append(_box((0, y, z), (0.46 - 0.02 * k, 0.07, h), bevel=0.03, rot=(tilt, 0, 0)))   # lumbar -> upper back curve
+    _mesh("Maya_Chair_Cushions", seat + back, up, coll, parent=root)
+    parts = [_cyl((0, 0.06, 0.46), (0, 0.06, 0.16), 0.03),                          # gas lift
+             _cyl((0, 0.06, 0.16), (0, 0.06, 0.10), 0.045),
+             _box((0, 0.06, 0.455), (0.26, 0.24, 0.03)),                           # seat mechanism
+             _box((0, 0.27, 0.55), (0.06, 0.05, 0.14), rot=(-10, 0, 0))]            # back bracket
+    for sx in (1, -1):                                                              # armrests
+        parts += [_box((sx * 0.27, 0.12, 0.56), (0.035, 0.05, 0.16)),
+                  _box((sx * 0.27, 0.06, 0.645), (0.07, 0.28, 0.035), bevel=0.014)]
+    wheels = []
+    for k in range(5):                                                              # star base + casters
+        a = math.radians(90 + k * 72)
+        end = (0.31 * math.cos(a), 0.06 + 0.31 * math.sin(a))
+        parts.append(_cyl((0, 0.06, 0.11), (end[0], end[1], 0.075), 0.022))
+        parts.append(_cyl((end[0], end[1], 0.075), (end[0], end[1], 0.055), 0.012))
+        wheels.append(_cyl((end[0] - 0.025, end[1], 0.03), (end[0] + 0.025, end[1], 0.03), 0.03, seg=10))
     _mesh("Maya_Chair_Frame", parts, frame, coll, parent=root)
+    _mesh("Maya_Chair_Wheels", wheels, wheel, coll, parent=root)
 
 
 def apply_classroom_set():
@@ -231,7 +244,7 @@ def apply_classroom_set():
     if old_legs:
         legs_mat = old_legs.data.materials[0]
         bpy.data.objects.remove(old_legs, do_unlink=True)
-        _mesh("Desk_Legs", [_box((DESK_X + sx * 0.58, sy * 0.27, 0.35), (0.05, 0.05, 0.70)) for sx in (1, -1) for sy in (1, -1)],
+        _mesh("Desk_Legs", [_box((DESK_X + (0.34 if sx > 0 else -0.56), sy * 0.27, 0.35), (0.05, 0.05, 0.70)) for sx in (1, -1) for sy in (1, -1)],
               legs_mat, room)
     mug = bpy.data.objects.get("Mug")
     if mug:
@@ -330,7 +343,7 @@ def apply_classroom_set():
     root.rotation_euler = (0, 0, R(MAYA_YAW))
     build_seated_body(root, chars)
     build_chair(root, chars)
-    sc["head_pose_offset"] = (R(-6), 0.0, R(-6))       # chin up a touch: watching the board
+    sc["head_pose_offset"] = (R(-8), 0.0, R(16))        # chin up a touch, eyes on the board (cancels the desk-set turn)
 
     # 5. Room dressing: bookshelf, ivy, pink neon strips
     shelf_m = _mat("M_Shelf_Wood", (0.16, 0.08, 0.04), rough=0.7)
@@ -419,7 +432,7 @@ def apply_classroom_set():
     _aim_cam("Cam_Board", (-0.50, -1.80, 1.05), (-0.38, 0.45, 1.36), 26, 4.0)               # board + Claude pointing
     _aim_cam("Cam_Mascot", claude + Vector((0.30, -0.85, -0.04)), claude + Vector((0.08, 0.0, 0.12)), 36, 1.8,
              focus=bpy.data.objects.get("Mascot_FocusTarget"))
-    _aim_cam("Cam_Human", head + Vector((-0.95, -1.15, -0.12)), head + Vector((0.0, 0.0, -0.14)), 40, 1.8,
+    _aim_cam("Cam_Human", head + Vector((-1.00, -0.85, -0.12)), head + Vector((0.0, 0.0, -0.14)), 40, 1.8,
              focus=bpy.data.objects.get("Human_FocusTarget"))
 
 
